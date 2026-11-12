@@ -47,6 +47,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/blog/comment/delete",
                         "/blog/comment/like/toggle",
                         "/bailian_assist/**",
+                        "/ai/models/**",
                         "/code_validate/**",
                         "/notification/**",
                         "/announcement/admin/**")

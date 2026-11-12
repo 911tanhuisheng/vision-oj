@@ -1,0 +1,18 @@
+[Unit]
+Description=MaYue OJ Spring Boot API
+After=network.target mysql.service redis-server.service
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/mayue-oj/server
+EnvironmentFile=/etc/mayue-oj/app.env
+ExecStart=/usr/bin/java -Xms256m -Xmx768m -jar /www/wwwroot/mayue-oj/server/mayue-oj.jar --spring.profiles.active=prod
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

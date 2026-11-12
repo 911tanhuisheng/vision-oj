@@ -13,4 +13,10 @@ public class ProblemStructureRequest {
     /** OCR：整理已有题目；GENERATE：根据教师要求原创题目。 */
     @Size(max = 16)
     private String mode = "OCR";
+
+    @Size(max = 20)
+    private String providerCode;
+
+    @Size(max = 100)
+    private String modelId;
 }

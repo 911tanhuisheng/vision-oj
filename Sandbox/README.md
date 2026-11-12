@@ -34,7 +34,8 @@ docker build -t mayue-oj-python-vision:1.0 -f Sandbox/docker/python-vision/Docke
 ```
 
 普通 Python 题也可以复用该镜像。图像题请求由主服务从可信 MinIO 读取图片，再传给 Sandbox；
-容器仍使用 `network=none`，学生程序从 stdin 读取形如 `/app/.image_0.jpg` 的容器内路径。
+容器仍使用 `network=none`，学生程序从 stdin 读取形如 `/input-images/.image_0.jpg` 的容器内路径。
+题图单独以只读目录挂载；学生代码的 `/app` 工作目录仍可写，两个目录相互独立。
 通用模型路径为 `/models/yolov8n.pt`，安全帽模型路径为 `/models/hard-hat-best.pt`。
 
 ## 配置
@@ -44,7 +45,7 @@ docker build -t mayue-oj-python-vision:1.0 -f Sandbox/docker/python-vision/Docke
 | 项 | 说明 |
 |----|------|
 | `server.port` | 默认 `8080`，context-path `/api` |
-| `sandbox.auth.key` | 与主服务调用时的 HTTP 头 `auth` 一致 |
+| `sandbox.auth.key` | 必须设置至少 32 位随机值，与主服务调用时的 HTTP 头 `auth` 一致；示例密钥不能启动新版本 |
 | `sandbox.docker.*-image` | 各语言 Docker 镜像；Python 默认 `mayue-oj-python-vision:1.0` |
 | `REDIS_HOST` | Redis 地址 |
 
@@ -52,10 +53,13 @@ docker build -t mayue-oj-python-vision:1.0 -f Sandbox/docker/python-vision/Docke
 
 ```bash
 cd Sandbox
-mvn spring-boot:run
+cp .sandbox.env.example .sandbox.env
+# 编辑 .sandbox.env，填写与主服务一致的 SANDBOX_AUTH_KEY
+bash start-sandbox.sh
+# 源码更新后：bash start-sandbox.sh --restart
 ```
 
-健康检查：本机访问 `POST http://127.0.0.1:8080/api/sandbox`（需 `auth` 头，与主服务 `codesandbox.auth-key` 一致）。
+健康检查：本机访问 `GET http://127.0.0.1:8080/api/health`。判题接口是 `POST /api/sandbox`，需要 `auth` 头。
 
 ## 主服务如何连接
 
@@ -65,7 +69,7 @@ mvn spring-boot:run
 codesandbox:
   url: http://<Sandbox 主机>:8080/api/sandbox
   auth-header-name: auth
-  auth-key: 123456   # 与 sandbox.auth.key 一致
+  auth-key: <同一个随机密钥>   # 与 sandbox.auth.key 一致
 ```
 
 也可用环境变量：`SANDBOX_URL`、`SANDBOX_AUTH_KEY`。**不要** 把 Sandbox 端口直接暴露公网。

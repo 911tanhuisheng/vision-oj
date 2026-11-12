@@ -159,16 +159,17 @@ onBeforeUnmount(() => {
 
 html[data-theme='light'] .blog-cyber {
   --cb-text: #0f172a;
-  --cb-muted: #475569;
-  --cb-subtle: #64748b;
-  --cb-glass: #ffffff;
-  --cb-glass-edge: rgba(15, 23, 42, 0.12);
+  --cb-muted: #334155;
+  --cb-subtle: #526477;
+  --cb-glass: #f2fbf9;
+  --cb-glass-edge: rgba(15, 118, 110, 0.22);
   --cb-glow: rgba(14, 165, 233, 0.04);
   color: var(--cb-text);
   background:
-    radial-gradient(ellipse 110% 58% at 50% -4%, rgba(14, 165, 233, 0.04), transparent 48%),
-    radial-gradient(ellipse 64% 40% at 100% 28%, rgba(139, 92, 246, 0.03), transparent 46%),
-    linear-gradient(180deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%);
+    radial-gradient(ellipse 62% 44% at 0% 3%, rgba(20, 184, 166, 0.3), transparent 72%),
+    radial-gradient(ellipse 54% 43% at 100% 22%, rgba(99, 102, 241, 0.21), transparent 72%),
+    radial-gradient(ellipse 65% 48% at 48% 100%, rgba(14, 165, 233, 0.17), transparent 72%),
+    linear-gradient(150deg, #d8f1ed 0%, #e1eef9 50%, #dcece9 100%);
 }
 
 .blog-cyber__noise {
@@ -491,12 +492,49 @@ html[data-theme='light'] .blog-cyber__stage {
 html[data-theme='light'] .blog-cyber__stage :deep(.panel) {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  background: #ffffff !important;
-  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  background: linear-gradient(155deg, #f8fffd 0%, #edf8f5 100%) !important;
+  border: 1px solid rgba(15, 118, 110, 0.24) !important;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 1) inset,
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 6px 16px rgba(15, 23, 42, 0.06) !important;
+    0 1px 0 rgba(255, 255, 255, 0.88) inset,
+    0 6px 18px rgba(15, 118, 110, 0.08),
+    0 18px 38px rgba(30, 64, 99, 0.1) !important;
+}
+
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel) {
+  background:
+    radial-gradient(circle at 92% 12%, rgba(165, 180, 252, 0.3), transparent 39%),
+    linear-gradient(115deg, #0d766f 0%, #175f81 52%, #344997 100%) !important;
+  border-color: rgba(13, 89, 105, 0.5) !important;
+  box-shadow: 0 18px 38px rgba(18, 75, 102, 0.22) !important;
+}
+
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__title--cosmic) {
+  background: linear-gradient(105deg, #ffffff, #d4fbf4 50%, #e0e7ff) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__greeting),
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__lead),
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__lead--cosmic),
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__live) {
+  color: #e8f7f5 !important;
+}
+
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__eyebrow) {
+  color: #a5f3e6 !important;
+}
+
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__live-readers),
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__live-sep),
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-hero.panel .blog-hero__activity) {
+  color: #e8f7f5 !important;
+  opacity: 0.95 !important;
+}
+
+html[data-theme='light'] .blog-cyber__stage :deep(.blog-toolbar.panel) {
+  background: linear-gradient(120deg, #edf9f4 0%, #e7f3f7 100%) !important;
 }
 
 /* —— 暗黑：正文区对比与继承色（压过子组件 scoped 的 --app-text） —— */
@@ -618,7 +656,7 @@ html[data-theme='dark'] .blog-cyber__stage :deep(.blog-hero__lead--cosmic) {
 }
 
 html[data-theme='light'] .blog-cyber__stage :deep(.blog-card.panel) {
-  border-color: rgba(15, 23, 42, 0.1) !important;
+  border-color: rgba(15, 118, 110, 0.24) !important;
 }
 
 html[data-theme='light'] .blog-cyber__stage :deep(.blog-card.panel:hover) {

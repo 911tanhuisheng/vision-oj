@@ -1,45 +1,27 @@
-# 本地私密配置模板（不要提交仓库）
-# 使用：复制为 application-local.yml（同目录），填入真实值后重启主服务
-# application.yml 已通过 spring.config.import 自动加载该文件（若存在）
+# 将此模板复制到 spingboot-init/application-local.yml（模块根目录，不在 src/main/resources）。
+# 该文件被 Git 忽略，也不会进入 JAR。dev 配置会自动读取本文件，
+# 前提是 IDE/Maven 的工作目录为 spingboot-init/。
 
 spring:
   datasource:
-    password: your_mysql_password
-
-  data:
-    redis:
-      host: localhost
-
+    password: your_local_mysql_password
   mail:
     username: your_email@example.com
     password: your_mail_app_password
 
 jwt:
-  secret: "replace-with-random-string-at-least-32-characters-long"
+  secret: replace-with-a-random-local-secret-at-least-32-characters
 
 minio:
-  endpoint: http://127.0.0.1:9000
   access-key: minioadmin
   secret-key: minioadmin
-  bucket-name: mayue-oj
-  public-url:
 
 codesandbox:
-  type: remote
-  url: http://127.0.0.1:8080/api/sandbox
-  auth-key: 123456
+  auth-key: replace-with-a-random-sandbox-secret-at-least-32-characters
 
 bailian:
-  enabled: true
-  api-key: your_dashscope_api_key
+  enabled: false
+  api-key:
 
-# 判题走 RabbitMQ 时（同时删掉 application.yml 里 RabbitAutoConfiguration 的 exclude）：
-# judge:
-#   mq:
-#     mode: rabbitmq
-# spring:
-#   rabbitmq:
-#     host: localhost
-#     port: 5672
-#     username: guest
-#     password: guest
+ai:
+  personal-key-encryption-key:

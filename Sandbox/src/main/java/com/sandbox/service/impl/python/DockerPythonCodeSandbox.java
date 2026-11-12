@@ -48,6 +48,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
 
     private static final String WORK_DIR = "/app";
+    private static final String IMAGE_DIR = "/input-images";
     private static final String MAIN_FILE = "main.py";
     private static final long COMPILE_TIMEOUT_MS = 10_000L;
     private static final long RUN_TIMEOUT_MS = 30_000L;
@@ -93,6 +94,8 @@ public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
         }
         List<String> images = ctx.request.getImageBase64List();
         if (images != null && !images.isEmpty()) {
+            ctx.imageDir = new File(work + "-images");
+            FileUtil.mkdir(ctx.imageDir);
             List<String> imageInputs = new ArrayList<>();
             int totalBytes = 0;
             try {
@@ -105,10 +108,9 @@ public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
                     if (totalBytes > MAX_TOTAL_IMAGE_BYTES) {
                         throw new SandboxException(SandboxError.BAD_REQUEST, "题图总大小超限", "total image size exceeded");
                     }
-                    File imageFile = new File(ctx.workDir, ".image_" + i + ".jpg");
+                    File imageFile = new File(ctx.imageDir, ".image_" + i + ".jpg");
                     FileUtil.writeBytes(bytes, imageFile);
-                    imageFile.setReadOnly();
-                    imageInputs.add(WORK_DIR + "/" + imageFile.getName());
+                    imageInputs.add(IMAGE_DIR + "/" + imageFile.getName());
                 }
                 // 学生程序从 stdin 读到的是容器内图片路径，而不是外网 URL。
                 ctx.inputList = imageInputs;
@@ -126,12 +128,13 @@ public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
             String image = sandboxProperties.getDocker().getPythonImage();
             ensureImage(client, image);
             boolean imageTask = ctx.request.getImageBase64List() != null && !ctx.request.getImageBase64List().isEmpty();
-            containerId = createSandboxContainer(client, ctx.workDir.getAbsolutePath(), image, imageTask);
-            // Python 无编译过程，这里做语法检查
+            containerId = createSandboxContainer(client, ctx.workDir.getAbsolutePath(),
+                    ctx.imageDir == null ? null : ctx.imageDir.getAbsolutePath(), image, imageTask);
+            // 只解析语法，不生成 __pycache__；挂载的代码目录对容器用户可能不可写。
             ExecuteMessage syntaxMsg = execInContainer(
                     client,
                     containerId,
-                    new String[]{"python3", "-m", "py_compile", WORK_DIR + "/" + MAIN_FILE},
+                    new String[]{"python3", "-c", "import ast; ast.parse(open('/app/main.py', encoding='utf-8').read(), filename='/app/main.py')"},
                     "",
                     COMPILE_TIMEOUT_MS
             );
@@ -221,22 +224,32 @@ public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
     @Override
     protected void cleanup(SandboxContext ctx) {
         String containerId = containerHolder.get();
-        DockerClient client = DockerHelper.client();
+        DockerClient client = null;
         try {
             if (StrUtil.isNotBlank(containerId)) {
                 try {
+                    client = DockerHelper.client();
                     client.removeContainerCmd(containerId).withForce(true).exec();
-                } catch (Exception ignore) {
+                } catch (Exception e) {
+                    log.warn("清理 Python 判题容器失败, containerId={}", containerId, e);
                 }
             }
         } finally {
             containerHolder.remove();
             memoryPeakHolder.remove();
-            try {
-                client.close();
-            } catch (Exception ignore) {
+            if (client != null) {
+                try {
+                    client.close();
+                } catch (Exception ignore) {
+                }
             }
-            super.cleanup(ctx);
+            try {
+                super.cleanup(ctx);
+            } finally {
+                if (ctx.imageDir != null) {
+                    FileUtil.del(ctx.imageDir);
+                }
+            }
         }
     }
 
@@ -261,7 +274,7 @@ public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
     }
 
     private static String createSandboxContainer(
-            DockerClient client, String hostWorkDir, String image, boolean imageTask) {
+            DockerClient client, String hostWorkDir, String hostImageDir, String image, boolean imageTask) {
         Map<String, String> tmpFs = new HashMap<>();
         tmpFs.put("/tmp", "rw,noexec,nosuid,size=64m");
         HostConfig hostConfig = HostConfig.newHostConfig()
@@ -277,7 +290,7 @@ public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
                         "no-new-privileges:true",
                         "apparmor=docker-default"
                 ))
-                .withBinds(new Bind(hostWorkDir, new Volume(WORK_DIR), AccessMode.rw))
+                .withBinds(buildBinds(hostWorkDir, hostImageDir))
                 .withTmpFs(tmpFs);
         CreateContainerResponse resp = client.createContainerCmd(image)
                 .withName("sandbox_py_" + UUID.randomUUID().toString().replace("-", ""))
@@ -288,6 +301,14 @@ public class DockerPythonCodeSandbox extends AbstractTemplateCodeSandbox {
                 .exec();
         client.startContainerCmd(resp.getId()).exec();
         return resp.getId();
+    }
+
+    static List<Bind> buildBinds(String hostWorkDir, String hostImageDir) {
+        Bind code = new Bind(hostWorkDir, new Volume(WORK_DIR), AccessMode.rw);
+        if (hostImageDir == null) {
+            return List.of(code);
+        }
+        return List.of(code, new Bind(hostImageDir, new Volume(IMAGE_DIR), AccessMode.ro));
     }
 
     private static void ensureImage(DockerClient client, String image) throws InterruptedException {

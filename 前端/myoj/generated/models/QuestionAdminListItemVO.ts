@@ -5,7 +5,7 @@
 import type { JudgeCase } from './JudgeCase';
 import type { JudgeConfig } from './JudgeConfig';
 export type QuestionAdminListItemVO = {
-    id?: number;
+    id?: string;
     title?: string;
     content?: string;
     questionType?: string;
@@ -20,7 +20,7 @@ export type QuestionAdminListItemVO = {
     judgeConfig?: JudgeConfig;
     thumbNum?: number;
     favourNum?: number;
-    userId?: number;
+    userId?: string;
     userNickname?: string;
     createTime?: string;
     updateTime?: string;

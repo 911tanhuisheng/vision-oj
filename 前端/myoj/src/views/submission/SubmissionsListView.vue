@@ -268,7 +268,7 @@ async function hydrateQuestionTitles(ids: (string | undefined)[]) {
   await Promise.all(
     missing.map(async (id) => {
       try {
-        const data = await Service.getPublicQuestionDetail(Number(id))
+        const data = await Service.getPublicQuestionDetail(id)
         if (isResultSuccess(data.code) && data.data?.title) {
           questionTitleCache.value = { ...questionTitleCache.value, [id]: data.data.title }
         }
@@ -294,11 +294,11 @@ async function fetchList(opts?: { silent?: boolean }) {
       const uid = adminFilterUserId.value.trim()
       const qid = adminFilterQuestionId.value.trim()
       const ord = filterSubmitNo.value.trim()
-      let userIdFilter: number | undefined
-      let questionIdFilter: number | undefined
+      let userIdFilter: string | undefined
+      let questionIdFilter: string | undefined
       let submitNoFilter: number | undefined
-      if (/^\d+$/.test(uid)) userIdFilter = Number(uid)
-      if (/^\d+$/.test(qid)) questionIdFilter = Number(qid)
+      if (/^[1-9]\d*$/.test(uid)) userIdFilter = uid
+      if (/^[1-9]\d*$/.test(qid)) questionIdFilter = qid
       if (userIdFilter != null && questionIdFilter != null && /^\d+$/.test(ord)) {
         submitNoFilter = Number(ord)
       }
@@ -507,8 +507,7 @@ async function fetchSubmitStatusSnapshot(): Promise<number | null> {
   if (!/^\d+$/.test(qid) || !/^\d+$/.test(sn)) return null
   try {
     const parsed = await QuestionSubmitControllerService.getSubmitStatusBySubmitNo(
-      // Snowflake 题目 ID 可超过 JS 安全整数；运行时保留字符串，不可 Number(qid)。
-      qid as unknown as number,
+      qid,
       Number(sn),
     )
     if (!isResultSuccess(parsed.code) || !parsed.data) return pendingLiveStatus.value
@@ -657,7 +656,7 @@ async function pollSubmitUntilTerminal() {
     if (legacyDbId) {
       try {
         if (signal.aborted) return
-        const parsed = await QuestionSubmitControllerService.getSubmitStatus(legacyDbId as unknown as number)
+        const parsed = await QuestionSubmitControllerService.getSubmitStatus(legacyDbId)
         if (signal.aborted) return
         if (isResultSuccess(parsed.code)) {
           const st = parsed.data?.status

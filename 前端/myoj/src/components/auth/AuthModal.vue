@@ -35,7 +35,77 @@ const isDarkShell = computed(() => layoutTheme?.value === 'dark')
 /** 弹层内容错峰渐显（与 Arco 打开时机对齐） */
 const contentReveal = ref(false)
 
-const tab = ref<'login' | 'register'>('login')
+const tab = ref<'login' | 'register' | 'recover'>('login')
+
+const recoveryForm = ref({ email: '', code: '', newPassword: '', confirmPassword: '' })
+const sendingRecoveryCode = ref(false)
+const resettingPassword = ref(false)
+const recoveryCountdown = ref(0)
+let recoveryTimer: ReturnType<typeof setInterval> | null = null
+
+function stopRecoveryTimer() {
+  if (recoveryTimer) clearInterval(recoveryTimer)
+  recoveryTimer = null
+  recoveryCountdown.value = 0
+}
+
+function openRecovery() {
+  recoveryForm.value = { email: registerForm.value.email, code: '', newPassword: '', confirmPassword: '' }
+  tab.value = 'recover'
+}
+
+async function sendRecoveryCode() {
+  const email = recoveryForm.value.email.trim()
+  if (!email || validateOptionalEmail(email)) {
+    Message.warning('请填写正确的注册邮箱')
+    return
+  }
+  if (recoveryCountdown.value > 0 || sendingRecoveryCode.value) return
+  sendingRecoveryCode.value = true
+  try {
+    const { data } = await axios.post<{ code: number; message: string }>(
+      `${OpenAPI.BASE.replace(/\/+$/, '')}/user/password/reset/code`,
+      { email },
+    )
+    if (!isResultSuccess(data.code)) throw new Error(data.message || '发送失败')
+    Message.success(data.message || '如果邮箱已绑定账号，验证码将发送到该邮箱')
+    recoveryCountdown.value = 60
+    recoveryTimer = setInterval(() => {
+      recoveryCountdown.value--
+      if (recoveryCountdown.value <= 0) stopRecoveryTimer()
+    }, 1000)
+  } catch (e) {
+    Message.error(mapError(e, '发送失败，请稍后再试'))
+  } finally {
+    sendingRecoveryCode.value = false
+  }
+}
+
+async function resetForgottenPassword() {
+  const { email, code, newPassword, confirmPassword } = recoveryForm.value
+  if (!email.trim() || validateOptionalEmail(email)) return void Message.warning('请填写正确的注册邮箱')
+  if (!/^\d{6}$/.test(code.trim())) return void Message.warning('请输入邮件中的6位验证码')
+  const passwordError = validateRegisterPassword(newPassword)
+  if (passwordError) return void Message.warning(passwordError)
+  if (newPassword !== confirmPassword) return void Message.warning('两次输入的密码不一致')
+  resettingPassword.value = true
+  try {
+    const { data } = await axios.post<{ code: number; message: string }>(
+      `${OpenAPI.BASE.replace(/\/+$/, '')}/user/password/reset`,
+      { email: email.trim(), code: code.trim(), newPassword },
+    )
+    if (!isResultSuccess(data.code)) throw new Error(data.message || '重置失败')
+    Message.success('密码已重置，请使用新密码登录')
+    recoveryForm.value = { email: '', code: '', newPassword: '', confirmPassword: '' }
+    stopRecoveryTimer()
+    tab.value = 'login'
+    loginForm.value.password = ''
+  } catch (e) {
+    Message.error(mapError(e, '重置失败，请稍后再试'))
+  } finally {
+    resettingPassword.value = false
+  }
+}
 
 const loginForm = ref({
   username: '',
@@ -63,12 +133,12 @@ const slideTrackRef = ref<HTMLElement | null>(null)
 const slideDragging = ref(false)
 
 const tabHint = computed(() =>
-  tab.value === 'login' ? '欢迎回到码跃 OJ，继续你的刷题之旅' : '几分钟即可加入社区与比赛',
+  tab.value === 'login' ? '欢迎回到码跃 OJ，继续你的刷题之旅' : tab.value === 'recover' ? '找回密码，重新进入码跃' : '几分钟即可加入社区与比赛',
 )
 
 /** 登录 / 注册面板下方一句引导，减少误操作 */
 const panelLead = computed(() =>
-  tab.value === 'login' ? '先滑块验证，再填写账号与图形码' : '仅用于创建账号，注册后请用同一用户名登录',
+  tab.value === 'login' ? '先滑块验证，再填写账号与图形码' : tab.value === 'recover' ? '使用注册时绑定的邮箱接收验证码，设置新密码' : '仅用于创建账号，注册后请用同一用户名登录',
 )
 
 function revokeCaptcha() {
@@ -214,6 +284,7 @@ watch(
       })
     } else {
       contentReveal.value = false
+      stopRecoveryTimer()
     }
   },
 )
@@ -232,7 +303,7 @@ async function onLogin() {
   const u = username.trim()
 
   if (!u || !password) {
-    Message.warning('请先填写用户名和密码')
+    Message.warning('请先填写用户名或邮箱及密码')
     return
   }
   if (!captchaUnlocked.value) {
@@ -257,11 +328,21 @@ async function onLogin() {
   }
   loginLoading.value = true
   try {
-    const result = await Service.login({
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+    const deviceParts = [
+      navigator.hardwareConcurrency ? `逻辑处理器 ${navigator.hardwareConcurrency} 核` : '',
+      deviceMemory ? `内存约 ${deviceMemory} GB` : '',
+      window.screen?.width && window.screen?.height
+        ? `屏幕 ${window.screen.width}×${window.screen.height} CSS像素`
+        : '',
+    ].filter(Boolean)
+    const payload: Parameters<typeof Service.login>[0] & { deviceDetails?: string } = {
       username: u,
       password,
       code: code.trim(),
-    })
+      deviceDetails: deviceParts.join('；'),
+    }
+    const result = await Service.login(payload)
     auth.applyLoginResult(result, u)
     if (auth.isAdmin) {
       registerAdminRoutes(router)
@@ -325,7 +406,10 @@ async function onRegister() {
   }
 }
 
-onBeforeUnmount(revokeCaptcha)
+onBeforeUnmount(() => {
+  revokeCaptcha()
+  stopRecoveryTimer()
+})
 </script>
 
 <template>
@@ -362,7 +446,7 @@ onBeforeUnmount(revokeCaptcha)
       </div>
 
       <div class="auth-body">
-        <div class="auth-body-block auth-body-block--tabs">
+        <div v-if="tab !== 'recover'" class="auth-body-block auth-body-block--tabs">
           <div class="segmented" :class="{ 'is-register': tab === 'register' }" role="tablist">
             <div class="segmented-pill" aria-hidden="true" />
             <button
@@ -396,13 +480,14 @@ onBeforeUnmount(revokeCaptcha)
         <Transition name="auth-panel" mode="out-in">
           <div v-if="tab === 'login'" key="login" class="auth-panel">
             <a-form layout="vertical" class="auth-form">
-              <a-form-item label="用户名" hide-asterisk class="auth-field">
+              <a-form-item label="用户名 / QQ 邮箱" hide-asterisk class="auth-field">
                 <a-input
                   v-model="loginForm.username"
                   allow-clear
                   size="large"
                   class="auth-input"
-                  placeholder="用户名"
+                  placeholder="用户名或注册时绑定的邮箱"
+                  autocomplete="username"
                 >
                   <template #prefix>
                     <span class="input-ico" aria-hidden="true">
@@ -448,6 +533,9 @@ onBeforeUnmount(revokeCaptcha)
                   </template>
                 </a-input-password>
               </a-form-item>
+              <div class="auth-recovery-link-row">
+                <button type="button" class="auth-recovery-link" @click="openRecovery">忘记密码？</button>
+              </div>
               <a-form-item label="验证码" hide-asterisk class="auth-field captcha-form-item">
                 <div
                   v-if="!captchaUnlocked"
@@ -532,6 +620,7 @@ onBeforeUnmount(revokeCaptcha)
                 进入码跃
               </a-button>
               <p class="auth-legal">
+                登录时会记录 IP、估算归属地及浏览器提供的设备概况，用于账号管理。
                 注册或登录即代表您同意
                 <RouterLink to="/legal/terms" class="auth-legal-link" @click="modalVisible = false">《服务协议》</RouterLink>
                 和
@@ -539,6 +628,38 @@ onBeforeUnmount(revokeCaptcha)
                   >《隐私政策》</RouterLink
                 >
               </p>
+            </a-form>
+          </div>
+
+          <div v-else-if="tab === 'recover'" key="recover" class="auth-panel">
+            <div class="recovery-heading">
+              <span class="recovery-heading__icon" aria-hidden="true">✉</span>
+              <div>
+                <strong>找回账号密码</strong>
+                <p>验证码将发送到账号绑定的邮箱，10 分钟内有效。</p>
+              </div>
+            </div>
+            <a-form layout="vertical" class="auth-form">
+              <a-form-item label="注册邮箱" hide-asterisk class="auth-field">
+                <a-input v-model="recoveryForm.email" type="email" size="large" class="auth-input" placeholder="请输入注册时绑定的邮箱" autocomplete="email" />
+              </a-form-item>
+              <a-form-item label="邮件验证码" hide-asterisk class="auth-field">
+                <div class="recovery-code-row">
+                  <a-input v-model="recoveryForm.code" :max-length="6" size="large" class="auth-input" placeholder="6 位数字验证码" inputmode="numeric" />
+                  <a-button class="recovery-code-button" :loading="sendingRecoveryCode" :disabled="recoveryCountdown > 0" @click="sendRecoveryCode">
+                    {{ recoveryCountdown > 0 ? `${recoveryCountdown}s 后重发` : '获取验证码' }}
+                  </a-button>
+                </div>
+              </a-form-item>
+              <a-form-item label="新密码" hide-asterisk class="auth-field">
+                <a-input-password v-model="recoveryForm.newPassword" size="large" class="auth-input" placeholder="6～20 位字母和数字" autocomplete="new-password" />
+              </a-form-item>
+              <a-form-item label="确认新密码" hide-asterisk class="auth-field">
+                <a-input-password v-model="recoveryForm.confirmPassword" size="large" class="auth-input" placeholder="再输入一次新密码" autocomplete="new-password" />
+              </a-form-item>
+              <a-button type="primary" size="large" long class="auth-submit" :loading="resettingPassword" @click="resetForgottenPassword">重置密码</a-button>
+              <button type="button" class="recovery-back" @click="tab = 'login'">← 返回登录</button>
+              <p class="recovery-help">账号没有绑定邮箱？请联系管理员核实身份后处理。</p>
             </a-form>
           </div>
 
@@ -574,7 +695,7 @@ onBeforeUnmount(revokeCaptcha)
                   allow-clear
                   size="large"
                   class="auth-input"
-                  placeholder="选填，用于找回通知"
+                  placeholder="建议填写，忘记密码时可用邮箱找回"
                 >
                   <template #prefix>
                     <span class="input-ico" aria-hidden="true">
@@ -1337,6 +1458,25 @@ onBeforeUnmount(revokeCaptcha)
 .auth-submit--secondary {
   background: linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #2dd4bf 100%) !important;
 }
+
+.auth-recovery-link-row { display: flex; justify-content: flex-end; margin: -10px 0 18px; }
+.auth-recovery-link, .recovery-back { border: 0; background: transparent; color: #0f766e; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.auth-recovery-link:hover, .recovery-back:hover { text-decoration: underline; }
+.auth-recovery-link:focus-visible, .recovery-back:focus-visible { outline: 2px solid #14b8a6; outline-offset: 3px; border-radius: 4px; }
+.recovery-heading { display: flex; gap: 13px; padding: 16px; margin: 0 0 21px; border: 1px solid #bdece5; border-radius: 14px; background: linear-gradient(120deg, #edfdf9, #f5fbff); }
+.recovery-heading__icon { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 11px; color: white; background: #0d9488; font-size: 21px; }
+.recovery-heading strong { font-size: 15px; color: #134e4a; }
+.recovery-heading p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; color: #64748b; }
+.recovery-code-row { display: flex; width: 100%; gap: 9px; }
+.recovery-code-row > .auth-input { min-width: 0; flex: 1; }
+.recovery-code-button { height: 46px; min-width: 116px; border-radius: 11px; color: #0f766e; border-color: #8bd9ce; }
+.recovery-back { display: block; margin: 18px auto 0; }
+.recovery-help { margin: 18px 0 0; text-align: center; font-size: 12px; line-height: 1.5; color: #64748b; }
+.auth-card--dark .recovery-heading { background: #122c34; border-color: #24555a; }
+.auth-card--dark .recovery-heading strong { color: #ccfbf1; }
+.auth-card--dark .recovery-heading p, .auth-card--dark .recovery-help { color: #94a3b8; }
+.auth-card--dark .auth-recovery-link, .auth-card--dark .recovery-back { color: #5eead4; }
+.auth-card--dark .recovery-code-button { color: #5eead4; background: #122c34; border-color: #24555a; }
 
 .auth-legal {
   margin: 12px 0 0;

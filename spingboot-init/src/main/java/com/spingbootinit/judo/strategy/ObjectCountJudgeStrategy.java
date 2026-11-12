@@ -9,9 +9,12 @@ import com.spingbootinit.model.entity.Question;
 import com.spingbootinit.model.enums.JudgeInfoMessageEnum;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.math.BigDecimal;
 import java.util.TreeSet;
 
 /**
@@ -99,10 +102,18 @@ public class ObjectCountJudgeStrategy implements JudgeStrategy {
             Map<String, Integer> counts = new LinkedHashMap<>();
             for (String key : json.keySet()) {
                 Object value = json.get(key);
-                if (key == null || key.isBlank() || !(value instanceof Number number) || number.intValue() < 0) {
+                if (key == null || key.isBlank() || !(value instanceof Number number)) {
                     throw new IllegalArgumentException("类别名必须非空，数量必须是非负整数");
                 }
-                counts.put(key.trim().toLowerCase(), number.intValue());
+                int count;
+                try {
+                    count = new BigDecimal(number.toString()).intValueExact();
+                } catch (NumberFormatException | ArithmeticException e) {
+                    throw new IllegalArgumentException("数量必须是非负整数且不能超过整数范围");
+                }
+                if (count < 0 || counts.putIfAbsent(key.trim().toLowerCase(), count) != null) {
+                    throw new IllegalArgumentException("数量必须非负，类别名不能重复");
+                }
             }
             return counts;
         } catch (IllegalArgumentException e) {
@@ -126,6 +137,33 @@ public class ObjectCountJudgeStrategy implements JudgeStrategy {
                 }
             }
             return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /** 任一类别的标准数量范围超过两倍误差时，不存在可通过所有用例的固定输出。 */
+    public static boolean hasNoSharedCountOutput(List<String> expectedOutputs, int tolerance) {
+        if (expectedOutputs == null || expectedOutputs.size() < 2 || tolerance < 0) return false;
+        try {
+            List<Map<String, Integer>> counts = new ArrayList<>();
+            Set<String> labels = new HashSet<>();
+            for (String output : expectedOutputs) {
+                Map<String, Integer> parsed = parseCounts(output);
+                counts.add(parsed);
+                labels.addAll(parsed.keySet());
+            }
+            for (String label : labels) {
+                int min = Integer.MAX_VALUE;
+                int max = 0;
+                for (Map<String, Integer> count : counts) {
+                    int value = count.getOrDefault(label, 0);
+                    min = Math.min(min, value);
+                    max = Math.max(max, value);
+                }
+                if ((long) max - min > 2L * tolerance) return true;
+            }
+            return false;
         } catch (IllegalArgumentException e) {
             return false;
         }

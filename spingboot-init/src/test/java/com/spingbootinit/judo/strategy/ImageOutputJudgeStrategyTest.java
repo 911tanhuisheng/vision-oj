@@ -25,6 +25,10 @@ class ImageOutputJudgeStrategyTest {
         String close = "[{\"label\":\"car\",\"x1\":0.12,\"y1\":0.12,\"x2\":0.62,\"y2\":0.62}]";
         assertTrue(ImageOutputJudgeStrategy.outputsMatch("IMAGE_OBJECT_DETECTION", expected, close, 50));
         assertFalse(ImageOutputJudgeStrategy.outputsMatch("IMAGE_OBJECT_DETECTION", expected, close.replace("car", "bus"), 50));
+        assertFalse(ImageOutputJudgeStrategy.outputsMatch("IMAGE_OBJECT_DETECTION", expected,
+                "[{\"label\":\"car\",\"x1\":-0.1,\"y1\":0.1,\"x2\":0.6,\"y2\":0.6}]", 50));
+        assertFalse(ImageOutputJudgeStrategy.outputsMatch("IMAGE_OBJECT_DETECTION", expected,
+                "[{\"label\":\"\",\"x1\":0.1,\"y1\":0.1,\"x2\":0.6,\"y2\":0.6}]", 50));
     }
 
     @Test

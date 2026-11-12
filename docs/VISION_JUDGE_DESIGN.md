@@ -47,10 +47,10 @@ flowchart LR
 - 基础模型：YOLOv8n
 - 最优权重：`vision-ai/models/hard-hat-best.pt`
 - 训练停止：第 91 轮提前停止，最优轮次 71
-- 独立测试集：Precision 0.649、Recall 0.704、mAP50 0.676、mAP50-95 0.462
+- 独立测试集复测（2026-10-30，883 张）：Precision 0.645、Recall 0.704、mAP50 0.676、mAP50-95 0.463，见 [原始评估记录](evidence/hard_hat_test.json)
 - 类别 mAP50-95：head 0.672、helmet 0.681、person 0.033
 
-实验表明模型对 head 和 helmet 已具备可演示效果；person 类因标注样本不足明显偏弱。论文应如实展示类别不均衡、误检漏检案例，并将扩充 person 样本及消融实验列为改进方向。
+实验表明模型对 head 和 helmet 已具备可演示效果；person 类因标注样本不足明显偏弱，当前三类平均 mAP50 未达到任务书 0.80 的要求。论文应如实展示类别不均衡、误检漏检案例，并将扩充 person 样本及消融实验列为改进方向。
 
 ## 五、部署与验收
 

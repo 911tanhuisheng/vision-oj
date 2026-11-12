@@ -1,67 +1,26 @@
 spring:
-  # 本机或服务器私密覆盖配置：application-local.yml 已被 Git 忽略。
-  config:
-    import: optional:classpath:application-local.yml
-  # 题图拍照/OCR 上传：Spring Boot 默认单文件仅 1MB，图像题允许最大 10MB。
+  application:
+    name: spingboot-init
   servlet:
     multipart:
       max-file-size: 10MB
       max-request-size: 12MB
-  # async / redis-stream 时排除 Rabbit 自动配置；judge.mq.mode=rabbitmq 时请注释掉下面 exclude
-  #  autoconfigure:
-  #    exclude: org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
-  datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/test?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:123456}
-    driver-class-name: com.mysql.cj.jdbc.Driver  # 显式指定（可选但推荐）
-
-  # 验证码等依赖 Redis；未启动 Redis 时相关接口会报错，本地请先启动 Redis（默认 6379）
-  data:
-    redis:
-      host: ${REDIS_HOST:192.168.136.128}
-      port: ${REDIS_PORT:6379}
-      timeout: 10s
-  rabbitmq:
-    host: ${RABBIT_HOST:127.0.0.1}
-    port: ${RABBIT_PORT:5672}
-    username: ${RABBIT_USER:guest}
-    password: ${RABBIT_PASSWORD:guest}
-    virtual-host: /
-
-  # 邮件配置（QQ邮箱）
-  mail:
-    host: smtp.qq.com
-    port: 587
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    default-encoding: UTF-8
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-            required: true
   jackson:
     time-zone: Asia/Shanghai
     date-format: yyyy-MM-dd HH:mm:ss
-# 端口被占用时可设环境变量 SERVER_PORT，例如：PowerShell 中 $env:SERVER_PORT=8889
+
+
 server:
   port: ${SERVER_PORT:8888}
   servlet:
     context-path: /api
 
-# 重要，勿删除，用于双重加密
 app:
   security:
     pepper: ${APP_SECURITY_PEPPER:}
 
-# 评论违禁词（可自行增删；修改后重启后端生效）
 moderation:
-  # 违禁评论 / AI 助手不良消息 自动限制时长（小时），至少 1；例：72=三天，24=一天，1=一小时（测试）
   comment-ban-hours: 1
-  # 管理员限时禁用允许的最大小时数（单次操作上限）
   admin-ban-max-hours: 8760
   bad-words:
     - 傻逼
@@ -85,43 +44,14 @@ moderation:
     - sb
     - 赌博
 
-# 同账号仅保留「最后一次登录」：新设备登录会踢掉旧设备会话（Redis auth:active-session:{userId}）
-# jwt 双令牌：access 短期（API 鉴权）、refresh 长期（仅换票）
-jwt:
-  secret: ${JWT_SECRET:ChangeMe-DevOnly-Set-JWT-SECRET-At-Least-32-Chars!!}
-  expiration: 86400          # 兼容旧配置
-  access-expiration: 86400   # access 24 小时（过期后由 refresh 无感续期）
-  refresh-expiration: 604800 # refresh 7 天
-
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
-      logic-delete-value: 1    # 已删除
-      logic-not-delete-value: 0 # 未删除
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 
-# MinIO 对象存储（头像与图像题题图）
-minio:
-  endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
-  access-key: ${MINIO_ACCESS_KEY:minioadmin}
-  secret-key: ${MINIO_SECRET_KEY:minioadmin}
-  bucket-name: ${MINIO_BUCKET:mayue-oj}
-  public-url: ${MINIO_PUBLIC_URL:}
-
-# YOLOv8 图像题自动标注服务
-vision-ai:
-  enabled: ${VISION_AI_ENABLED:true}
-  base-url: ${VISION_AI_BASE_URL:http://127.0.0.1:8090}
-
-# 本地 ComfyUI 图像生成（RTX 4050 6GB 建议 512x512）
-image-generation:
-  enabled: ${IMAGE_GENERATION_ENABLED:true}
-  base-url: ${COMFYUI_BASE_URL:http://127.0.0.1:8188}
-  checkpoint: ${COMFYUI_CHECKPOINT:v1-5-pruned-emaonly.safetensors}
-  timeout-seconds: ${COMFYUI_TIMEOUT_SECONDS:180}
-
-# springdoc-openapi配置
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -129,41 +59,16 @@ springdoc:
     path: /swagger-ui.html
   packages-to-scan: com.spingbootinit.controller
 
-# 判题分发：async | redis-stream | rabbitmq（改 mode 后重启；rabbitmq 需注释 spring.autoconfigure.exclude）
-# 判题任务分发（学习见 judo/mq/package-info.java）
-# mode: async（默认，本机线程池）| redis-stream（需 Redis）| rabbitmq（需 Rabbit，并注释掉 spring.autoconfigure.exclude 里的 Rabbit）
 judge:
   mq:
-    mode: async
+    mode: ${JUDGE_MQ_MODE:async}
     stream-key: judge:stream
     group: judge-group
-    consumer: judge-consumer-1
+    consumer: ${JUDGE_STREAM_CONSUMER:judge-consumer-1}
     rabbit:
       exchange: judge.exchange
       queue: judge.queue
       routing-key: judge.submit
-
-# 主服务 → Sandbox 判题服务（用户代码在 Sandbox 侧 Docker 中执行，生产请将 url 改为 Linux 判题机内网地址）
-codesandbox:
-  type: ${CODESANDBOX_TYPE:remote}
-  # 完整 URL，与 Sandbox 的 context-path /api 及 POST /sandbox 一致
-  url: ${SANDBOX_URL:http://192.168.136.128:8080/api/sandbox}
-  auth-header-name: ${SANDBOX_AUTH_HEADER:auth}
-  # 须与 Sandbox 模块 sandbox.auth.key 相同
-  auth-key: ${SANDBOX_AUTH_KEY:123456}
-
-# 做题页「学习助手」：阿里云百炼兼容 OpenAI Chat Completions
-# 控制台：https://bailian.console.aliyun.com/  — API-KEY 勿写入仓库
-# 环境变量：DASHSCOPE_API_KEY（或 BAILIAN_API_KEY）；开关：BAILIAN_ENABLED=true
-bailian:
-  enabled: ${BAILIAN_ENABLED:false}
-  # 仅从服务器环境变量读取，禁止在仓库中填写真实 API Key。
-  api-key: ${DASHSCOPE_API_KEY:${BAILIAN_API_KEY:}}
-  base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-  model: qwen-plus
-  temperature: 0.35
-  max-tokens: 2500
-
 
 test:
   pay: AliPay

@@ -122,6 +122,7 @@ public class JudeServiceImpl implements JudgeService {
             ExecuteCodeRequest executeCodeRequest = ExecuteCodeRequest.builder()
                     .code(code)
                     .language(language)
+                    .userId(questionSubmit.getUserId())
                     .inputList(inputList)
                     .imageBase64List(imageBase64List)
                     .build();

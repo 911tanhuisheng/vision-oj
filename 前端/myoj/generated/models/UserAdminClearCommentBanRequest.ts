@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export type UserAdminClearCommentBanRequest = {
-    userId: number;
+    userId: string;
 };
 

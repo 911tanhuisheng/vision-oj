@@ -39,7 +39,7 @@
 - 多语言编程题提交与 **Docker 沙箱评测**
 - 竞赛、排行榜、签到与积分
 - 技术博客、评论与站内通知
-- 做题页 **AI 学习助手**（阿里云百炼，SSE 流式）
+- 做题页 **AI 学习助手**（百炼 / DeepSeek 个人模型或站点默认模型，SSE 流式）
 
 架构上采用 **主业务服务 + 独立判题沙箱服务**，通过 HTTP 解耦，便于扩展判题节点与资源隔离。
 
@@ -469,7 +469,7 @@ sequenceDiagram
 
 **AI 助手流式**（独立链路）：
 
-`BailianAssistController` → `BailianAssistService.streamChat` → 转发百炼 `text/event-stream` → 前端 `bailianAssistChat()`（`fetch` 读流）。
+`BailianAssistController` → `AiModelSettingsService.resolve`（按登录用户选择个人加密凭据，或使用站点默认）→ `BailianAssistService.streamChat` → 预设平台的 `text/event-stream` → 前端 `bailianAssistChat()`（`fetch` 读流）。教师拍照录题与 AI 出题复用同一模型路由，YOLO/OCR/ComfyUI 与确定性判题仍为独立链路。`ai_usage_log` 仅保存平台、模型、功能、耗时和成功状态。
 
 ---
 
@@ -539,9 +539,9 @@ erDiagram
 
 | 文件 | 说明 |
 |------|------|
-| `db/schema.sql` | **只跑这一个**：建表、旧库补列、admin 账号、示例竞赛 |
+| `db/schema.sql` | 完整建库脚本：建表、旧库补列、admin 账号、40 道题和示例竞赛 |
 
-默认数据库名：`test`（与 `application.yml` 一致）。
+默认数据库名：`tan`（生产默认连接；环境变量 `MYSQL_URL` 可覆盖）。
 
 ---
 
@@ -575,7 +575,8 @@ erDiagram
 | `/blog/comment` | 评论 |
 | `/notification` | 站内通知 |
 | `/announcement` | 全站公告 |
-| `/bailian_assist` | AI 助手（SSE） |
+| `/bailian_assist` | AI 助手（SSE）、教师题目结构化 |
+| `/ai/models` | 个人模型目录、加密配置、连接测试与删除 |
 | `/code_validate` | 代码语法检查 |
 | `/file` | 上传（MinIO） |
 
@@ -626,6 +627,7 @@ flowchart LR
 - 用户代码 **不在主 JVM 执行**，仅 Sandbox + Docker
 - 沙箱接口 **共享密钥头** `auth`，应对内网或穿透 URL 做 IP 白名单
 - 敏感配置（数据库、JWT、MinIO、API Key）使用 **环境变量**，勿提交仓库
+- 个人 API Key 使用 AES-GCM 加密保存到 `user_ai_provider_config`；平台 URL 由服务端预设，前端查询只返回掩码，注销账号时清除个人凭据
 
 ---
 

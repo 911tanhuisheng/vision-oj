@@ -10,7 +10,7 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * 用于前端「基本信息」回显的安全视图对象（避免暴露 password/email/phone 等敏感字段）
+ * 用于登录用户查询自身资料的视图对象；不返回密码。
  */
 @Data
 public class UserProfileVO {
@@ -18,6 +18,11 @@ public class UserProfileVO {
     private Long id;
 
     private String nickname;
+
+    private String username;
+
+    /** 仅登录用户查询自己的资料时返回，供账户安全页展示绑定状态。 */
+    private String email;
 
     private String avatar;
 

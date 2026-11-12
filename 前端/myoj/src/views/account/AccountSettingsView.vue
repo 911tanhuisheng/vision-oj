@@ -3,18 +3,19 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import axios from 'axios'
 import { Message, Modal } from '@arco-design/web-vue'
 import { ApiError, OpenAPI, Service } from '@generated'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { isResultSuccess, isResultUnauthorized } from '@/api/result'
 import { getBackendErrorMessage, isAxiosUnauthorizedResponse } from '@/api/httpError'
 import { resolveMediaUrl } from '@/utils/resolveMediaUrl'
 import chinaDivisionOptions from '@pansy/china-division'
 import AdminUsersPanel from './AdminUsersPanel.vue'
+import AiModelSettingsPanel from './AiModelSettingsPanel.vue'
 
 type ProfileForm = {
   username: string
   phone: string
-  gender: 'male' | 'female'
+  gender: 'unknown' | 'male' | 'female'
   birthday: string
   location: string
   profile: string
@@ -29,11 +30,21 @@ type ApiResult<T> = {
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const saving = ref(false)
 const uploading = ref(false)
 const profileLoadErrorNotified = ref(false)
+const profileLoading = ref(false)
+const profileReady = ref(false)
 const passwordModalVisible = ref(false)
 const passwordSaving = ref(false)
+const emailModalVisible = ref(false)
+const emailSending = ref(false)
+const emailSaving = ref(false)
+const boundEmail = ref('')
+const emailForm = ref({ email: '', password: '', code: '' })
+const emailCountdown = ref(0)
+let emailTimer: ReturnType<typeof setInterval> | null = null
 const closeAccountModalVisible = ref(false)
 const closeAccountSaving = ref(false)
 const closeAccountPassword = ref('')
@@ -45,20 +56,20 @@ const passwordForm = ref({
 const form = ref<ProfileForm>({
   username: auth.username || '',
   phone: '',
-  gender: 'male',
+  gender: 'unknown',
   birthday: '',
   location: '',
   profile: '',
   avatar: auth.avatar || '',
 })
 
-type TabKey = 'base' | 'security' | 'users'
+type TabKey = 'base' | 'security' | 'ai' | 'users'
 
 /** 刷新页面后仍停留在上次选中的标签（含「用户管理」） */
 const ACCOUNT_SETTINGS_TAB_KEY = 'myoj.account.settings.tab'
 
 function isTabKey(v: string | null): v is TabKey {
-  return v === 'base' || v === 'security' || v === 'users'
+  return v === 'base' || v === 'security' || v === 'ai' || v === 'users'
 }
 
 function readInitialAccountTab(): TabKey {
@@ -84,6 +95,7 @@ const tabs = computed(() => {
   const list: { key: TabKey; label: string }[] = [
     { key: 'base', label: '基本信息' },
     { key: 'security', label: '账户安全' },
+    { key: 'ai', label: 'AI 模型' },
   ]
   if (auth.isAdmin) {
     list.push({ key: 'users', label: '用户管理' })
@@ -91,7 +103,8 @@ const tabs = computed(() => {
   return list
 })
 
-const activeTab = ref<TabKey>(readInitialAccountTab())
+const activeTab = ref<TabKey>(route.query.tab === 'ai' ? 'ai' : readInitialAccountTab())
+watch(() => route.query.tab, (tab) => { if (tab === 'ai') activeTab.value = 'ai' })
 
 watch(
   () => auth.isAdmin,
@@ -388,6 +401,7 @@ const userRoleText = computed(() => {
 const panelSubText = computed(() => {
   if (activeTab.value === 'base') return '更新昵称、头像与公开资料信息。'
   if (activeTab.value === 'security') return '管理登录状态与安全设置。'
+  if (activeTab.value === 'ai') return '连接自己的大模型，管理 API Key 和模型名称。'
   return '分页查看全站用户账号状态、签到与积分、最近登录 IP 与异常标记（仅管理员）。'
 })
 
@@ -468,8 +482,7 @@ async function onUploadAvatar(ev: Event) {
         : String((raw as { avatar?: string; url?: string }).avatar || (raw as { avatar?: string; url?: string }).url || '')
     if (!avatarUrl) throw new Error('后端未返回头像地址')
     form.value.avatar = avatarUrl
-    auth.setAvatar(avatarUrl)
-    Message.success('头像上传成功')
+    Message.success('头像上传成功，请点击“保存更改”使其生效')
   } catch (e) {
     if (isAxiosUnauthorizedResponse(e)) {
       sessionExpiredAndGoLogin()
@@ -483,6 +496,10 @@ async function onUploadAvatar(ev: Event) {
 }
 
 async function onSave() {
+  if (!profileReady.value) {
+    Message.warning('账户资料尚未加载成功，请重试后再保存')
+    return
+  }
   if (!(await ensureBearerToken())) return
   const check = validateWebsiteList(websiteList.value)
   if (!check.ok) {
@@ -498,17 +515,15 @@ async function onSave() {
   try {
     const websites = normalizeWebsiteList(websiteList.value)
     const locationPayload = buildLocationCodesPayload(locationPath.value, form.value.location)
-    const countryForPayload =
-      form.value.location.trim() || [locationPayload?.province, locationPayload?.city, locationPayload?.district].filter(Boolean).join(' / ')
     const result = await Service.updateMy({
       nickname: form.value.username.trim(),
       phone: phoneTrim,
       avatar: form.value.avatar || '',
       introduction: form.value.profile.trim(),
-      locationCodes: locationPayload,
+      locationCodes: locationPayload || { province: '', city: '', district: '' },
       website: websites,
-      sex: form.value.gender === 'female' ? 2 : 1,
-      country: countryText.value.trim() || countryForPayload || undefined,
+      sex: form.value.gender === 'female' ? 2 : form.value.gender === 'male' ? 1 : 0,
+      country: form.value.location.trim(),
       birthday: form.value.birthday || '',
     })
     if (isResultUnauthorized(result.code)) {
@@ -554,6 +569,72 @@ async function onSave() {
 function openPasswordModal() {
   passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
   passwordModalVisible.value = true
+}
+
+function stopEmailTimer() {
+  if (emailTimer) clearInterval(emailTimer)
+  emailTimer = null
+  emailCountdown.value = 0
+}
+
+function openEmailModal() {
+  emailForm.value = { email: '', password: '', code: '' }
+  emailModalVisible.value = true
+}
+
+async function onSendEmailCode() {
+  const email = emailForm.value.email.trim()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return void Message.warning('请输入正确的新邮箱')
+  if (!emailForm.value.password) return void Message.warning('请输入当前登录密码')
+  if (emailCountdown.value > 0 || emailSending.value) return
+  if (!(await ensureBearerToken())) return
+  emailSending.value = true
+  try {
+    const { data } = await axios.post<ApiResult<null>>(
+      `${OpenAPI.BASE.replace(/\/+$/, '')}/user/account/email/code`,
+      { email, password: emailForm.value.password },
+      { headers: await getAuthHeaders() },
+    )
+    if (!isResultSuccess(data.code)) throw new Error(data.message || '发送失败')
+    Message.success(data.message || '验证码已发送')
+    emailCountdown.value = 60
+    emailTimer = setInterval(() => {
+      emailCountdown.value--
+      if (emailCountdown.value <= 0) stopEmailTimer()
+    }, 1000)
+  } catch (e) {
+    Message.error(getBackendErrorMessage(e, '发送失败，请稍后再试'))
+  } finally {
+    emailSending.value = false
+  }
+}
+
+async function onBeforeBindEmail(): Promise<boolean> {
+  const { email, password, code } = emailForm.value
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || !password || !/^\d{6}$/.test(code.trim())) {
+    Message.warning('请填写新邮箱、当前密码和6位邮件验证码')
+    return false
+  }
+  if (!(await ensureBearerToken())) return false
+  emailSaving.value = true
+  try {
+    const { data } = await axios.post<ApiResult<null>>(
+      `${OpenAPI.BASE.replace(/\/+$/, '')}/user/account/email/bind`,
+      { email: email.trim(), password, code: code.trim() },
+      { headers: await getAuthHeaders() },
+    )
+    if (!isResultSuccess(data.code)) throw new Error(data.message || '绑定失败')
+    boundEmail.value = email.trim()
+    emailForm.value = { email: '', password: '', code: '' }
+    stopEmailTimer()
+    Message.success(data.message || '邮箱绑定成功')
+    return true
+  } catch (e) {
+    Message.error(getBackendErrorMessage(e, '邮箱绑定失败'))
+    return false
+  } finally {
+    emailSaving.value = false
+  }
 }
 
 function openCloseAccountModal() {
@@ -714,6 +795,7 @@ function toDateInputValue(v: unknown): string {
 async function fetchProfileByLoginId() {
   if (!auth.userId?.trim()) return
   if (!(await ensureBearerToken())) return
+  profileLoading.value = true
   try {
     const base = OpenAPI.BASE.replace(/\/+$/, '')
     // 路径必须使用字符串 userId：Service.get(number) 会破坏超过 JS 安全整数的雪花 id，导致 403 被误判成「过期」
@@ -733,33 +815,41 @@ async function fetchProfileByLoginId() {
       const msg = data?.message?.trim() || ''
       if (msg && looksLikeSessionMessage(msg)) {
         sessionExpiredAndGoLogin()
+      } else {
+        profileLoadErrorNotified.value = true
+        Message.warning(msg || '资料加载失败，请重试')
       }
       return
     }
     const me = data.data
     const nickname = me.nickname != null ? String(me.nickname).trim() : ''
-    if (nickname) form.value.username = nickname
+    const loginName = me.username != null ? String(me.username).trim() : ''
+    form.value.username = nickname || loginName || auth.displayName
+    auth.setUsername(nickname || loginName || auth.displayName)
+    boundEmail.value = me.email != null ? String(me.email).trim() : ''
     const phoneRaw = me.phone != null ? String(me.phone).trim() : ''
     form.value.phone = phoneRaw
     // 头像：接口字段与侧栏表单一致；并写回 auth，顶栏 AppLayout 使用 auth.avatarUrl 才能同步
     const rawAvatar = me.avatar
     const avatarFromApi =
       rawAvatar == null || (typeof rawAvatar === 'string' && rawAvatar.trim() === '') ? '' : String(rawAvatar).trim()
-    form.value.avatar = avatarFromApi || (auth.avatar?.trim() ?? '')
+    form.value.avatar = avatarFromApi
     auth.setAvatar(form.value.avatar || null)
     const intro = me.introduction != null ? String(me.introduction) : ''
-    if (intro.trim()) form.value.profile = intro
+    form.value.profile = intro
 
     const locationCodesRaw = (me as Record<string, unknown>).locationCodes
     const codes = parseLocationCodesFromResponse(locationCodesRaw)
+    form.value.location = ''
     if (codes.length) {
       locationPath.value = codes
-      const labels = labelsFromCodes(codes)
+      const labels = resolveLocationLabels(codes)
       if (labels.length) {
         form.value.location = labels.join(' / ')
       }
     } else {
       locationPath.value = []
+      form.value.location = ''
     }
 
     const country = me.country != null ? String(me.country).trim() : ''
@@ -770,16 +860,21 @@ async function fetchProfileByLoginId() {
     applyWebsitePayload(w)
 
     const b = toDateInputValue(me.birthday)
-    if (b) form.value.birthday = b
+    form.value.birthday = b
 
     const sexRaw = me.sex != null ? String(me.sex).trim() : ''
     if (sexRaw === '1') form.value.gender = 'male'
     else if (sexRaw === '2') form.value.gender = 'female'
+    else form.value.gender = 'unknown'
+    profileReady.value = true
+    profileLoadErrorNotified.value = false
   } catch (e) {
     if (!profileLoadErrorNotified.value) {
       profileLoadErrorNotified.value = true
       Message.warning(getBackendErrorMessage(e, '网络异常，请稍后再试'))
     }
+  } finally {
+    profileLoading.value = false
   }
 }
 
@@ -800,6 +895,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopEmailTimer()
   themeObserver?.disconnect()
   themeObserver = null
 })
@@ -856,12 +952,16 @@ onBeforeUnmount(() => {
                 v-if="activeTab === 'base'"
                 type="button"
                 class="save-btn save-btn--header"
-                :disabled="saving || uploading"
+                :disabled="!profileReady || saving || uploading"
                 @click="onSave"
               >
-                {{ saving ? '保存中...' : '保存更改' }}
+                {{ saving ? '保存中...' : profileLoading ? '资料加载中...' : '保存更改' }}
               </button>
             </div>
+            <p v-if="activeTab === 'base' && profileLoadErrorNotified && !profileLoading" class="profile-load-error">
+              资料加载失败，暂时无法保存。
+              <button type="button" @click="fetchProfileByLoginId">重新加载</button>
+            </p>
           </header>
 
           <template v-if="activeTab === 'base'">
@@ -910,6 +1010,7 @@ onBeforeUnmount(() => {
               <div class="field">
                 <span>性别</span>
                 <div class="radio-row">
+                  <button type="button" class="radio-btn" :class="{ active: form.gender === 'unknown' }" @click="form.gender = 'unknown'">未设置</button>
                   <button
                     type="button"
                     class="radio-btn"
@@ -1000,20 +1101,49 @@ onBeforeUnmount(() => {
                     当前为管理员账号，系统不允许在此自助注销；需由其他管理员处理或先降级为普通用户。
                   </p>
                 </div>
-                <div class="security-card security-card--clickable" role="button" tabindex="0" @click="openPasswordModal">
-                  <div class="security-card-title">密码与绑定信息</div>
-                  <div class="security-card-desc">点击即可修改密码，后续将支持绑定邮箱/手机号。</div>
+                <div class="security-card security-card--clickable" role="button" tabindex="0" @click="openPasswordModal" @keydown.enter="openPasswordModal" @keydown.space.prevent="openPasswordModal">
+                  <div class="security-card-title">登录密码</div>
+                  <div class="security-card-desc">验证旧密码后修改；成功后需用新密码重新登录。</div>
                   <div class="security-muted">点击进入修改密码</div>
+                </div>
+                <div class="security-card security-card--clickable" role="button" tabindex="0" @click="openEmailModal" @keydown.enter="openEmailModal" @keydown.space.prevent="openEmailModal">
+                  <div class="security-card-title">绑定邮箱</div>
+                  <div class="security-card-desc">{{ boundEmail ? `当前邮箱：${boundEmail}` : '尚未绑定邮箱，建议绑定后使用邮箱登录与找回密码。' }}</div>
+                  <div class="security-muted">{{ boundEmail ? '点击更换邮箱' : '点击绑定邮箱' }} · 需验证当前密码和新邮箱</div>
                 </div>
               </div>
             </div>
           </template>
 
+          <AiModelSettingsPanel v-else-if="activeTab === 'ai'" />
           <AdminUsersPanel v-else-if="activeTab === 'users'" :is-light="isLight" />
         </div>
       </section>
     </div>
   </div>
+
+  <a-modal
+    v-model:visible="emailModalVisible"
+    :title="boundEmail ? '更换绑定邮箱' : '绑定邮箱'"
+    :modal-class="['password-modal-shell', isLight ? 'password-modal-shell--light' : 'password-modal-shell--dark']"
+    :mask-closable="false"
+    :mask-style="passwordMaskStyle"
+    :ok-loading="emailSaving"
+    ok-text="确认绑定"
+    cancel-text="取消"
+    :body-style="{ padding: '18px 20px 16px' }"
+    @before-ok="onBeforeBindEmail"
+  >
+    <div class="password-modal" :class="{ 'password-modal--light': isLight }">
+      <p class="password-modal-tip">验证码会发送至新邮箱，10 分钟内有效。绑定后可用邮箱登录和找回密码。</p>
+      <a-input v-model="emailForm.email" placeholder="新邮箱（QQ 邮箱也可以）" autocomplete="email" />
+      <a-input-password v-model="emailForm.password" placeholder="当前登录密码" autocomplete="current-password" />
+      <div class="email-code-row">
+        <a-input v-model="emailForm.code" :max-length="6" placeholder="6 位邮件验证码" inputmode="numeric" />
+        <a-button :loading="emailSending" :disabled="emailCountdown > 0" @click="onSendEmailCode">{{ emailCountdown ? `${emailCountdown}s 后重发` : '获取验证码' }}</a-button>
+      </div>
+    </div>
+  </a-modal>
 
   <a-modal
     v-model:visible="passwordModalVisible"
@@ -2054,6 +2184,40 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.email-code-row {
+  display: flex;
+  gap: 10px;
+}
+
+.email-code-row :deep(.arco-input-wrapper) {
+  min-width: 0;
+  flex: 1;
+}
+
+.email-code-row :deep(.arco-btn) {
+  flex: none;
+  min-width: 112px;
+  border-radius: 11px;
+}
+
+.profile-load-error {
+  margin: 8px 0 0;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.profile-load-error button {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  color: #0d9488;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .password-modal-tip {

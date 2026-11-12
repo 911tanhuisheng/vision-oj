@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ContestListItemVO = {
-    id?: number;
+    id?: string;
     title?: string;
     startTime?: string;
     endTime?: string;

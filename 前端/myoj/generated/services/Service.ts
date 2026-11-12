@@ -31,7 +31,6 @@ import type { ResultBlogPostDetailVO } from '../models/ResultBlogPostDetailVO';
 import type { ResultBoolean } from '../models/ResultBoolean';
 import type { ResultListSiteAnnouncementItemVO } from '../models/ResultListSiteAnnouncementItemVO';
 import type { ResultLoginVO } from '../models/ResultLoginVO';
-import type { ResultLong } from '../models/ResultLong';
 import type { ResultNotificationSummaryVO } from '../models/ResultNotificationSummaryVO';
 import type { ResultPageBlogPostListItemVO } from '../models/ResultPageBlogPostListItemVO';
 import type { ResultPageInAppNotificationItemVO } from '../models/ResultPageInAppNotificationItemVO';
@@ -311,12 +310,12 @@ export class Service {
      * 创建题目
      * 创建题目
      * @param requestBody
-     * @returns ResultLong OK
+     * @returns ResultString OK
      * @throws ApiError
      */
     public static addQuestion(
         requestBody: QuestionAddRequest,
-    ): CancelablePromise<ResultLong> {
+    ): CancelablePromise<ResultString> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/question/add',
@@ -554,12 +553,12 @@ export class Service {
     /**
      * 发布公告（管理员）
      * @param requestBody
-     * @returns ResultLong OK
+     * @returns ResultString OK
      * @throws ApiError
      */
     public static adminPublish(
         requestBody: AnnouncementPublishRequest,
-    ): CancelablePromise<ResultLong> {
+    ): CancelablePromise<ResultString> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/announcement/admin/publish',
@@ -623,7 +622,7 @@ export class Service {
      * @throws ApiError
      */
     public static get(
-        id: number,
+        id: string,
     ): CancelablePromise<ResultUserProfileVO> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -705,7 +704,7 @@ export class Service {
      * @throws ApiError
      */
     public static getPublicQuestionDetail(
-        id: number,
+        id: string,
     ): CancelablePromise<ResultQuestionPublicDetailVO> {
         return __request(OpenAPI, {
             method: 'GET',

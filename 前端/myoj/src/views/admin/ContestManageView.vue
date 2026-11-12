@@ -146,7 +146,7 @@ async function openEdit(row: ContestRow) {
   resetForm()
   modalOpen.value = true
   try {
-    const data = await ContestControllerService.getContest(row.id as unknown as number)
+    const data = await ContestControllerService.getContest(row.id)
     if (!isResultSuccess(data.code) || !data.data) {
       Message.error(data.message || '加载赛事详情失败')
       modalOpen.value = false
@@ -225,7 +225,7 @@ async function submitModal(): Promise<boolean> {
       }
     } else {
       const data = await ContestAdminControllerService.update({
-        id: editingId.value as unknown as number,
+        id: editingId.value,
         title,
         description: formDesc.value.trim() || undefined,
         startTime: new Date(formStartMs.value).toISOString(),
@@ -264,7 +264,7 @@ async function requestDelete(ids: string[], tip: string) {
   deleting.value = true
   try {
     const data = await ContestAdminControllerService.deleteBatch({
-      ids: ids as unknown as number[],
+      ids,
     })
     if (!isResultSuccess(data.code)) {
       Message.error(data.message || '删除失败')

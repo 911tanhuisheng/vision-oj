@@ -46,6 +46,12 @@ public class Question extends BaseEntity implements Serializable {
     /** 图像识别模型：YOLO_GENERAL / YOLO_HELMET / EASYOCR_ZH_EN / OPENCV_ANALYSIS */
     private String visionModelKey;
 
+    /** 题图来源：UPLOAD / LOCAL_COMFYUI / DASHSCOPE */
+    private String generationSource;
+
+    /** 生图模型标识；手动上传时为空 */
+    private String generationModel;
+
     /**
      * 目标计数判题时允许的单类数量误差
      */

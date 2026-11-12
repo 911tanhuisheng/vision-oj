@@ -88,9 +88,20 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 throw new BusinessException(ResultCode.PARAMS_ERROR.getCode(), "目标检测类题目只能使用 YOLO 模型");
             }
             question.setVisionModelKey(modelKey);
+            String generationSource = StringUtils.defaultIfBlank(question.getGenerationSource(), "UPLOAD");
+            if (!Set.of("UPLOAD", "LOCAL_COMFYUI", "DASHSCOPE").contains(generationSource)) {
+                throw new BusinessException(ResultCode.PARAMS_ERROR.getCode(), "不支持的题图来源");
+            }
+            question.setGenerationSource(generationSource);
+            if ("UPLOAD".equals(generationSource)) question.setGenerationModel(null);
+            else if (StringUtils.isBlank(question.getGenerationModel()) || question.getGenerationModel().length() > 128) {
+                throw new BusinessException(ResultCode.PARAMS_ERROR.getCode(), "请填写有效的生图模型");
+            }
         } else {
             question.setCountTolerance(0);
             question.setVisionModelKey(null);
+            question.setGenerationSource(null);
+            question.setGenerationModel(null);
         }
 
         if (StringUtils.isBlank(title) || title.length() > 255) {
@@ -170,14 +181,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     }
 
     private void validateObjectCountJson(String raw, int caseNo) {
-        try {
-            cn.hutool.json.JSONObject json = cn.hutool.json.JSONUtil.parseObj(raw);
-            for (String key : json.keySet()) {
-                if (StringUtils.isBlank(key) || !(json.get(key) instanceof Number number) || number.intValue() < 0) {
-                    throw new IllegalArgumentException();
-                }
-            }
-        } catch (Exception e) {
+        if (!com.spingbootinit.judo.strategy.ObjectCountJudgeStrategy.outputsMatch(raw, raw, 0)) {
             throw new BusinessException(ResultCode.PARAMS_ERROR.getCode(),
                     "第 " + caseNo + " 组标准输出必须是目标计数 JSON，例如 {\"car\":3,\"person\":2}");
         }

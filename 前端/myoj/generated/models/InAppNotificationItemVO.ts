@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type InAppNotificationItemVO = {
-    id?: number;
+    id?: string;
     type?: number;
     title?: string;
     body?: string;

@@ -5,7 +5,7 @@
 import type { JudgeCase } from './JudgeCase';
 import type { JudgeConfig } from './JudgeConfig';
 export type QuestionUpdateRequest = {
-    id: number;
+    id: string;
     title: string;
     content: string;
     questionType?: string;

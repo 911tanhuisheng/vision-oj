@@ -62,13 +62,16 @@ public class SecurityPolicy {
             throw new SandboxException(SandboxError.SECURITY_REJECT, "安全检查未通过：测试用例过多", "too many cases");
         }
         String lang = ctx.request.getLanguage() == null ? "" : ctx.request.getLanguage().trim().toLowerCase();
+        // The source scanner is a secondary guard. Comments and string literals are
+        // not executable Python code and must not reject otherwise valid submissions.
+        String checkedCode = "python".equals(lang) ? pythonCodeWithoutCommentsAndStrings(code) : code;
         Map<String, String> rules = switch (lang) {
             case "python" -> pythonRules;
             case "cpp", "c++" -> cppRules;
             default -> javaRules;
         };
         for (Map.Entry<String, String> e : rules.entrySet()) {
-            if (code.contains(e.getKey())) {
+            if (checkedCode.contains(e.getKey())) {
                 String readable = e.getValue();
                 throw new SandboxException(
                         SandboxError.SECURITY_REJECT,
@@ -77,5 +80,47 @@ public class SecurityPolicy {
                 );
             }
         }
+    }
+
+    private static String pythonCodeWithoutCommentsAndStrings(String source) {
+        StringBuilder result = new StringBuilder(source.length());
+        int length = source.length();
+        for (int i = 0; i < length;) {
+            char c = source.charAt(i);
+            if (c == '#') {
+                while (i < length && source.charAt(i) != '\n') {
+                    result.append(' ');
+                    i++;
+                }
+                continue;
+            }
+            if (c != '\'' && c != '"') {
+                result.append(c);
+                i++;
+                continue;
+            }
+            boolean triple = i + 2 < length && source.charAt(i + 1) == c && source.charAt(i + 2) == c;
+            int quoteLength = triple ? 3 : 1;
+            for (int j = 0; j < quoteLength; j++) result.append(' ');
+            i += quoteLength;
+            while (i < length) {
+                char current = source.charAt(i);
+                if (current == '\\' && i + 1 < length) {
+                    result.append(' ');
+                    result.append(source.charAt(i + 1) == '\n' ? '\n' : ' ');
+                    i += 2;
+                    continue;
+                }
+                if (current == c && (!triple || (i + 2 < length
+                        && source.charAt(i + 1) == c && source.charAt(i + 2) == c))) {
+                    for (int j = 0; j < quoteLength; j++) result.append(' ');
+                    i += quoteLength;
+                    break;
+                }
+                result.append(current == '\n' ? '\n' : ' ');
+                i++;
+            }
+        }
+        return result.toString();
     }
 }

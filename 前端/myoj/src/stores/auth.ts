@@ -350,7 +350,8 @@ export const useAuthStore = defineStore('auth', () => {
           : String(rawAvatar).trim()
       setAvatar(avatarStr)
       const nick = me.nickname != null ? String(me.nickname).trim() : ''
-      if (nick) setUsername(nick)
+      const loginName = me.username != null ? String(me.username).trim() : ''
+      if (nick || loginName) setUsername(nick || loginName)
     } catch {
       /* 静默 */
     }

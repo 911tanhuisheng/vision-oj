@@ -1,24 +1,16 @@
 package com.spingbootinit;
 
 import com.spingbootinit.utils.ClientIpUtils;
-import com.spingbootinit.utils.RedisUtil;
-import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 数字验证码 存入到redis
  */
-@SpringBootTest
 class SpingbootInitApplicationTests {
-    @Resource
-    private RedisUtil redisUtil;
-
     @Test
     void contextLoads() {
         Random rand = new Random();

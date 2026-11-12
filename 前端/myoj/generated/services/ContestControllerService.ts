@@ -32,7 +32,7 @@ export class ContestControllerService {
      * @throws ApiError
      */
     public static rank(
-        contestId: number,
+        contestId: string,
     ): CancelablePromise<ResultListContestRankRowVO> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -58,7 +58,7 @@ export class ContestControllerService {
      * @throws ApiError
      */
     public static getContest(
-        id: number,
+        id: string,
     ): CancelablePromise<ResultContestDetailVO> {
         return __request(OpenAPI, {
             method: 'GET',

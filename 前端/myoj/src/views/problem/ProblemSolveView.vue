@@ -427,7 +427,7 @@ async function syncContestClosedGate() {
   }
   contestGateReady.value = false
   try {
-    const data = await ContestControllerService.getContest(cid as unknown as number)
+    const data = await ContestControllerService.getContest(cid)
     if (!isResultSuccess(data.code) || !data.data) {
       contestMetaPhase.value = null
       contestDetailEndIso.value = null
@@ -1118,7 +1118,7 @@ async function loadDetail() {
   loading.value = true
   try {
     const id = String(route.params.id || '').trim()
-    const data = await Service.getPublicQuestionDetail(id as unknown as number)
+    const data = await Service.getPublicQuestionDetail(id)
     if (!isResultSuccess(data.code)) {
       Message.error(data.message || '题目加载失败')
       return
@@ -1267,10 +1267,10 @@ async function submitCode() {
     const submitBody: QuestionSubmitAddRequest = {
       language: language.value,
       code: currentEditorCode(),
-      questionId: questionId as unknown as number,
+      questionId,
     }
     if (contestIdForSubmit.value) {
-      submitBody.contestId = contestIdForSubmit.value as unknown as number
+      submitBody.contestId = contestIdForSubmit.value
     }
     const data = await QuestionSubmitControllerService.doQuestionSubmit(submitBody)
     if (!isResultSuccess(data.code)) {

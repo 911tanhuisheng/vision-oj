@@ -12,7 +12,13 @@ const props = defineProps<{
   isLight: boolean
 }>()
 
-type AdminUserItem = UserAdminListItemVO
+type AdminUserItem = UserAdminListItemVO & {
+  lastLoginRegion?: string
+  lastLoginDevice?: string
+  lastLoginOs?: string
+  lastLoginBrowser?: string
+  lastLoginDeviceDetails?: string
+}
 
 type FieldItem = { key: string; label: string; value: string; mono?: boolean; hot?: boolean; empty?: boolean }
 
@@ -208,6 +214,11 @@ function buildFields(row: AdminUserItem): FieldItem[] {
     { key: 'email', label: '邮箱', value: displayText(row.email), empty: !row.email?.trim() },
     { key: 'phone', label: '手机', value: displayText(row.phone), mono: !!row.phone?.trim(), empty: !row.phone?.trim() },
     { key: 'lastLoginIp', label: '最近登录 IP', value: displayText(row.lastLoginIp), mono: !!row.lastLoginIp?.trim(), empty: !row.lastLoginIp?.trim() },
+    { key: 'lastLoginRegion', label: 'IP 归属地（估算）', value: displayText(row.lastLoginRegion), empty: !row.lastLoginRegion?.trim() },
+    { key: 'lastLoginDevice', label: '最近登录设备', value: displayText(row.lastLoginDevice), empty: !row.lastLoginDevice?.trim() },
+    { key: 'lastLoginOs', label: '操作系统', value: displayText(row.lastLoginOs), empty: !row.lastLoginOs?.trim() },
+    { key: 'lastLoginBrowser', label: '浏览器', value: displayText(row.lastLoginBrowser), empty: !row.lastLoginBrowser?.trim() },
+    { key: 'lastLoginDeviceDetails', label: '设备概况（浏览器提供）', value: displayText(row.lastLoginDeviceDetails), empty: !row.lastLoginDeviceDetails?.trim() },
     { key: 'lastLoginTime', label: '最近登录时间', value: formatLoginTime(row.lastLoginTime ?? undefined), empty: !row.lastLoginTime },
     {
       key: 'loginFailCount',
@@ -420,12 +431,13 @@ function promptClearAiAssistBan(row: AdminUserItem) {
   })
 }
 
-function parseAdminUserId(row: AdminUserItem): number | null {
+function parseAdminUserId(row: AdminUserItem): string | null {
   const uid = row.id
   if (uid === undefined || uid === null) return null
-  const n = typeof uid === 'number' ? uid : Number(String(uid).trim())
-  if (!Number.isFinite(n) || n <= 0) return null
-  return n
+  // 雪花 ID 可能超过 JavaScript 安全整数范围，不能用 Number 转换。
+  if (typeof uid === 'number' && !Number.isSafeInteger(uid)) return null
+  const id = String(uid).trim()
+  return /^[1-9]\d*$/.test(id) ? id : null
 }
 
 async function postClearAiAssistBan(row: AdminUserItem): Promise<boolean> {

@@ -26,9 +26,11 @@ import com.spingbootinit.model.vo.uservo.UserCheckInStatusVO;
 import com.spingbootinit.model.vo.uservo.UserLeaderboardRowVO;
 import com.spingbootinit.model.vo.uservo.UserSessionStatusVO;
 import com.spingbootinit.service.InAppNotificationService;
+import com.spingbootinit.service.IpRegionService;
 import com.spingbootinit.service.UserService;
 import com.spingbootinit.service.UserStatusNotifyService;
 import com.spingbootinit.utils.ClientIpUtils;
+import com.spingbootinit.utils.LoginDeviceInfo;
 import com.spingbootinit.utils.JsonUtils;
 import com.spingbootinit.utils.JwtUtils;
 import com.spingbootinit.utils.RedisUtil;
@@ -40,6 +42,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -85,6 +88,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private PasswordProcessor passwordProcessor; // 密码加解密组件：这里主要用于加密存储与密码匹配校验
+
+    @Resource
+    private IpRegionService ipRegionService;
 
     @Resource
     private JwtUtils jwtUtils; // JWT 工具：负责生成登录 token
@@ -148,11 +154,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (this.count(queryWrapper) > 0) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "用户已存在");
         }
-        // 检查邮箱是否存在
-        queryWrapper.clear();
-        queryWrapper.eq(User::getEmail, registerRequest.getEmail());
-        if (this.count(queryWrapper) > 0) {
-            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "邮箱已被注册");
+        // 邮箱选填；不填时统一存 NULL，不能拿 NULL 去查重，否则第二位未填邮箱的用户无法注册。
+        String email = registerRequest.getEmail() == null ? null : registerRequest.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        if (email != null && !email.isEmpty()) {
+            queryWrapper.clear();
+            queryWrapper.eq(User::getEmail, email);
+            if (this.count(queryWrapper) > 0) {
+                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "邮箱已被注册");
+            }
         }
 
         // 确认密码校验
@@ -164,7 +173,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User newUser = User.builder()
                 .username(registerRequest.getUsername())
                 .password(passwordProcessor.encode(registerRequest.getPassword()))
-                .email(registerRequest.getEmail())
+                .email(email == null || email.isEmpty() ? null : email)
                 .userRole("user")
                 .status(1)
                 .build();
@@ -190,9 +199,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      */
     @Override
     public LoginVO login(LoginRequest loginRequest, HttpServletRequest request) {
-        // 先根据用户名查用户。这里默认用户名唯一，所以 getOne 即可。
+        // 用户名和邮箱共用一个登录框。用户名不允许 @，因此可明确区分两种查找方式。
+        String account = loginRequest.getUsername().trim();
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(User::getUsername, loginRequest.getUsername());
+        if (account.contains("@")) {
+            queryWrapper.eq(User::getEmail, account);
+        } else {
+            queryWrapper.eq(User::getUsername, account);
+        }
         User user = this.getOne(queryWrapper);
         // 同时判断“用户不存在”与“密码不匹配”，统一返回用户名或密码错误，
         // 这样可以减少向外暴露系统内部信息。
@@ -204,9 +218,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         validateCaptcha(loginRequest.getCode(), request);
         // 登录成功：记录本次客户端 IP 与登录时间（IP 来自 TCP 连接或代理头，即用户访问来源）
         String clientIp = ClientIpUtils.resolve(request);
+        LoginDeviceInfo deviceInfo = LoginDeviceInfo.fromUserAgent(request.getHeader("User-Agent"));
         LambdaUpdateWrapper<User> loginUw = new LambdaUpdateWrapper<>();
         loginUw.eq(User::getId, user.getId())
                 .set(User::getLastLoginIp, clientIp)
+                .set(User::getLastLoginDevice, deviceInfo.device())
+                .set(User::getLastLoginOs, deviceInfo.os())
+                .set(User::getLastLoginBrowser, deviceInfo.browser())
+                .set(User::getLastLoginDeviceDetails, safeDeviceDetails(loginRequest.getDeviceDetails()))
                 .set(User::getLastLoginTime, new Date())
                 .set(User::getLoginFailCount, 0);
         this.update(loginUw);
@@ -379,14 +398,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (request.getIntroduction() != null) uw.set(User::getIntroduction, request.getIntroduction());
         if (request.getCountry() != null) uw.set(User::getCountry, request.getCountry().trim());
         if (request.getSex() != null) uw.set(User::getSex, request.getSex());
-        if (request.getBirthday() != null) uw.set(User::getBirthday, request.getBirthday());
+        if (request.getBirthday() != null) {
+            String birthday = request.getBirthday().trim();
+            try {
+                uw.set(User::getBirthday, birthday.isEmpty() ? null
+                        : java.sql.Date.valueOf(LocalDate.parse(birthday)));
+            } catch (DateTimeParseException ex) {
+                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "生日格式错误，请使用年月日");
+            }
+        }
         // website 在 Java 里是 List<String> 语义，但数据库当前存的是 JSON 字符串，
         // 所以这里先把数组清洗干净，再序列化成 JSON 文本写入。
         if (request.getWebsite() != null) {
             uw.set(User::getWebsite, JSONUtil.toJsonStr(jsonUtils.normalizeWebsiteList(request.getWebsite())));
         }
         // 省市区编码同样按 JSON 字符串落库，便于前端级联组件直接回显
-        if (request.getLocationCodes() != null) uw.set(User::getLocationCodes, JSONUtil.toJsonStr(request.getLocationCodes()));
+        if (request.getLocationCodes() != null) {
+            Location loc = request.getLocationCodes();
+            boolean empty = (loc.getProvince() == null || loc.getProvince().isBlank())
+                    && (loc.getCity() == null || loc.getCity().isBlank())
+                    && (loc.getDistrict() == null || loc.getDistrict().isBlank());
+            uw.set(User::getLocationCodes, empty ? null : JSONUtil.toJsonStr(loc));
+        }
 
         // email/phone：库表对二者建了唯一索引；空字符串 '' 在 MySQL 里仍是“一个值”，多行不能同为 ''。
         // 用户清空输入框时前端常传 ""，应落库为 NULL，避免 Duplicate entry '' for key 'uk_email' / uk_phone。
@@ -426,8 +459,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         // 必须先核对旧密码，确认是账号本人在操作
         User user = this.getById(userId);
-        if (!passwordProcessor.matches(request.getOldPassword(), user.getPassword())) {
+        if (user == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "账号不存在");
+        }
+        if (request.getOldPassword() == null || !passwordProcessor.matches(request.getOldPassword(), user.getPassword())) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "旧密码错误");
+        }
+        String nextPassword = request.getNewPassword();
+        if (nextPassword == null || !nextPassword.matches("^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d]{6,20}$")) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "新密码须为6～20位字母和数字组合");
+        }
+        if (!nextPassword.equals(request.getConfirmNewPassword())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "两次输入的新密码不一致");
+        }
+        if (passwordProcessor.matches(nextPassword, user.getPassword())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "新密码不能与旧密码相同");
         }
         // 新密码入库前同样要加密，不能明文保存
         user.setPassword(passwordProcessor.encode(request.getNewPassword()));
@@ -435,6 +481,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (!ok) {
             throw new BusinessException(ResultCode.INTERNAL_ERROR.getCode(), "修改密码失败");
         }
+        rotateLoginSession(userId);
 
     }
 
@@ -492,6 +539,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             item.setAiBanUntil(resolveAiBanUntil(u));
             item.setAiBanReason(resolveAiBanReason(u));
             item.setLastLoginIp(u.getLastLoginIp());
+            item.setLastLoginRegion(ipRegionService.estimate(u.getLastLoginIp()));
+            item.setLastLoginDevice(u.getLastLoginDevice());
+            item.setLastLoginOs(u.getLastLoginOs());
+            item.setLastLoginBrowser(u.getLastLoginBrowser());
+            item.setLastLoginDeviceDetails(u.getLastLoginDeviceDetails());
             item.setLastLoginTime(u.getLastLoginTime());
             item.setLoginFailCount(u.getLoginFailCount());
             // 以下为签到/积分字段，供管理后台用户列表展示（与自助签到使用同一套 User 表列）
@@ -1454,6 +1506,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         LambdaUpdateWrapper<User> uw = new LambdaUpdateWrapper<>();
         uw.eq(User::getId, userId).set(User::getLastReadAnnouncementId, announcementId);
         this.update(uw);
+    }
+
+    private static String safeDeviceDetails(String value) {
+        if (value == null || value.isBlank()) return null;
+        String cleaned = value.replaceAll("[^\\p{L}\\p{N} .×;：；~/-]", "").trim();
+        return cleaned.isEmpty() ? null : cleaned.substring(0, Math.min(cleaned.length(), 160));
     }
 }
 

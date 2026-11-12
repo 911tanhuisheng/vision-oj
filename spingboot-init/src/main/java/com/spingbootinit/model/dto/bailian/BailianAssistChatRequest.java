@@ -45,4 +45,10 @@ public class BailianAssistChatRequest {
     private String code;
 
     private List<BailianAssistTurnDTO> history = new ArrayList<>();
+
+    @Size(max = 20)
+    private String providerCode;
+
+    @Size(max = 100)
+    private String modelId;
 }

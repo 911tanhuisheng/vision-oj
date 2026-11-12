@@ -7,8 +7,8 @@ import type { ContestAdminBatchDeleteRequest } from '../models/ContestAdminBatch
 import type { ContestAdminPageRequest } from '../models/ContestAdminPageRequest';
 import type { ContestAdminUpdateRequest } from '../models/ContestAdminUpdateRequest';
 import type { ResultBoolean } from '../models/ResultBoolean';
-import type { ResultLong } from '../models/ResultLong';
 import type { ResultPageContestAdminListItemVO } from '../models/ResultPageContestAdminListItemVO';
+import type { ResultString } from '../models/ResultString';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -60,12 +60,12 @@ export class ContestAdminControllerService {
     }
     /**
      * @param requestBody
-     * @returns ResultLong OK
+     * @returns ResultString OK
      * @throws ApiError
      */
     public static add(
         requestBody: ContestAdminAddRequest,
-    ): CancelablePromise<ResultLong> {
+    ): CancelablePromise<ResultString> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/contest/admin/add',

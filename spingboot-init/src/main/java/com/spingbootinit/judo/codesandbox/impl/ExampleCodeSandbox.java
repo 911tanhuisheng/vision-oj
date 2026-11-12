@@ -40,6 +40,9 @@ public class ExampleCodeSandbox implements CodeSandbox {
             HttpHeaders httpHeaders = new HttpHeaders();
             httpHeaders.set(codeSandboxProperties.getAuthHeaderName(), codeSandboxProperties.getAuthKey());
             httpHeaders.setContentType(MediaType.APPLICATION_JSON);
+            if (executeCodeRequest.getUserId() != null && executeCodeRequest.getUserId() > 0) {
+                httpHeaders.set("X-OJ-User-Id", executeCodeRequest.getUserId().toString());
+            }
 
             // 创建请求实体（POST请求才适合带body）
             HttpEntity<ExecuteCodeRequest> entity = new HttpEntity<>(executeCodeRequest, httpHeaders);

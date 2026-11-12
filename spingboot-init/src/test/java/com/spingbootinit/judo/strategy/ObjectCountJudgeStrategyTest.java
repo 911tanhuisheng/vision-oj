@@ -6,6 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ObjectCountJudgeStrategyTest {
+    @Test
+    void rejectsFractionalAndOverflowCounts() {
+        assertFalse(ObjectCountJudgeStrategy.outputsMatch("{\"bus\":1}", "{\"bus\":1.9}", 0));
+        assertFalse(ObjectCountJudgeStrategy.outputsMatch("{\"bus\":1}", "{\"bus\":4294967297}", 0));
+    }
 
     @Test
     void acceptsDifferentJsonOrderAndWhitespace() {

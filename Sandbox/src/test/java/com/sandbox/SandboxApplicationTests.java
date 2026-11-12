@@ -12,7 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-@SpringBootTest
+@SpringBootTest(properties = "sandbox.auth.key=test-only-sandbox-secret-32-characters")
 class SandboxApplicationTests {
     @Resource
     private CodeSandboxFactory codeSandboxFactory;

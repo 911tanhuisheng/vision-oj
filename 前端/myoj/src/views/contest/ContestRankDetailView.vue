@@ -240,7 +240,7 @@ async function loadDetail() {
   }
   detailLoading.value = true
   try {
-    const res = await ContestControllerService.getContest(contestId.value as unknown as number)
+    const res = await ContestControllerService.getContest(contestId.value)
     if (!isResultSuccess(res.code)) {
       Message.error(res.message || '加载失败')
       detail.value = null
@@ -261,7 +261,7 @@ async function loadRank(silent = false) {
   if (!/^\d+$/.test(id)) return
   if (!silent) rankLoading.value = true
   try {
-    const res = await ContestControllerService.rank(contestId.value as unknown as number)
+    const res = await ContestControllerService.rank(contestId.value)
     if (!isResultSuccess(res.code)) {
       rankRows.value = []
       rankError.value = res.message || '暂时无法加载榜单'
@@ -293,7 +293,7 @@ async function joinContest() {
   }
   joinLoading.value = true
   try {
-    const res = await ContestControllerService.join({ contestId: id as unknown as number })
+    const res = await ContestControllerService.join({ contestId: id })
     if (!isResultSuccess(res.code)) {
       Message.error(res.message || '报名失败')
       return

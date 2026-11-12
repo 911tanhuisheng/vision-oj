@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ContestRankCellVO = {
-    questionId?: number;
+    questionId?: string;
     score?: number;
     time?: number;
     memory?: number;

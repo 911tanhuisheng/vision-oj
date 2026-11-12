@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { Location } from './Location';
 export type UserProfileVO = {
-    id?: number;
+    id?: string;
     nickname?: string;
     avatar?: string;
     introduction?: string;

@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type UserSessionStatusVO = {
-    userId?: number;
+    userId?: string;
     status?: number;
     banType?: string;
     banReason?: string;

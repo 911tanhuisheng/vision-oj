@@ -101,7 +101,7 @@ public class DockerCppCodeSandbox extends AbstractTemplateCodeSandbox {
             ensureImage(client, IMAGE);
             containerId = createSandboxContainer(client, ctx.workDir.getAbsolutePath());
 
-            // g++ 编译：产物放到 /app/main（即宿主机 workDir 下）
+            // 编译产物放在容器内可写、可执行的临时目录；/app 的宿主机挂载目录可能不可写。
             ExecuteMessage compileMsg = execInContainer(
                     client,
                     containerId,
@@ -111,7 +111,7 @@ public class DockerCppCodeSandbox extends AbstractTemplateCodeSandbox {
                             "-std=c++17",
                             "-pipe",
                             "-o",
-                            WORK_DIR + "/" + BIN_FILE,
+                            "/run/oj-bin/" + BIN_FILE,
                             WORK_DIR + "/" + SRC_FILE
                     },
                     "",
@@ -158,7 +158,7 @@ public class DockerCppCodeSandbox extends AbstractTemplateCodeSandbox {
                 FileUtil.writeString(input == null ? "" : input, new File(ctx.workDir, inputFileName), StandardCharsets.UTF_8);
                 String inputPathInContainer = WORK_DIR + "/" + inputFileName;
 
-                String runShell = WORK_DIR + "/" + BIN_FILE + " < " + inputPathInContainer;
+                String runShell = "/run/oj-bin/" + BIN_FILE + " < " + inputPathInContainer;
                 ExecuteMessage runMsg = execInContainer(
                         client,
                         containerId,
@@ -243,6 +243,7 @@ public class DockerCppCodeSandbox extends AbstractTemplateCodeSandbox {
     private static String createSandboxContainer(DockerClient client, String hostWorkDir) {
         Map<String, String> tmpFs = new HashMap<>();
         tmpFs.put("/tmp", "rw,noexec,nosuid,size=64m");
+        tmpFs.put("/run/oj-bin", "rw,exec,nosuid,size=64m,mode=1777");
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode("none")
                 .withReadonlyRootfs(true)

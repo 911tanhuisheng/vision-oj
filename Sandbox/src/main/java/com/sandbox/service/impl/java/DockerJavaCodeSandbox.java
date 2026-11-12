@@ -75,7 +75,7 @@ public class DockerJavaCodeSandbox extends AbstractTemplateCodeSandbox {
             ExecuteMessage compileMsg = execInContainer(
                     client,
                     containerId,
-                    new String[]{"javac", "-encoding", "UTF-8", WORK_DIR + "/" + MAIN_FILE},
+                    new String[]{"javac", "-encoding", "UTF-8", "-d", "/tmp", WORK_DIR + "/" + MAIN_FILE},
                     "",
                     sandboxProperties.getExecution().getDockerCompileTimeoutMs()
             );
@@ -122,7 +122,7 @@ public class DockerJavaCodeSandbox extends AbstractTemplateCodeSandbox {
                 String inputPathInContainer = WORK_DIR + "/" + inputFileName;
 
                 // 不将用户输入拼接到 shell 命令，避免命令注入；统一通过 stdin 文件传参。
-                String runShell = "java -Xmx128m -Dfile.encoding=UTF-8 -cp " + WORK_DIR + " Main < " + inputPathInContainer;
+                String runShell = "java -Xmx128m -Dfile.encoding=UTF-8 -cp /tmp Main < " + inputPathInContainer;
 
                 ExecuteMessage runMsg = execInContainer(
                         client,

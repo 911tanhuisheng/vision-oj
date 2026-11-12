@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch, watchEffect } from 'vue'
+import { Message } from '@arco-design/web-vue'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useStudyAiCopilotStore } from '@/stores/studyAiCopilot'
@@ -14,6 +15,8 @@ import AiInput from './AiInput.vue'
 import type { QuickChip } from './AiInput.vue'
 import { AI_COPILOT_ACTIVE_TAB_KEY, type AiCopilotTabId } from './keys'
 import AiHeroIcon from './AiHeroIcon.vue'
+import AiModelPicker from './AiModelPicker.vue'
+import { useAiModelsStore } from '@/stores/aiModels'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -74,6 +77,7 @@ const hotThree = computed(() => quickActions.value.slice(0, 3))
 
 const auth = useAuthStore()
 const store = useStudyAiCopilotStore()
+const aiModels = useAiModelsStore()
 const { messages, draft, sending, streamingAssistantId, streamingPlainText } = storeToRefs(store)
 
 const { nowMs: aiBanNowMs } = useBanCountdownTick()
@@ -143,8 +147,56 @@ const stream = useStudyAiCopilotStream((userText: string, history: BailianTurn[]
   sampleCases: (props.sampleCases || '').slice(0, 6000) || undefined,
   runResult: (props.runResult || '').slice(0, 10000) || undefined,
   code: props.getCode?.() ?? '',
+  providerCode: aiModels.selectedProvider,
+  modelId: aiModels.selectedModel || undefined,
   history,
 }))
+
+const runDiagnosis = computed(() => {
+  if (!props.runResult.trim()) return null
+  try {
+    const result = JSON.parse(props.runResult) as {
+      terminalError?: boolean
+      allSamplePassed?: boolean
+      suspectedShortcut?: boolean
+      sandboxMessage?: string
+      judgeInfo?: { message?: string }
+      cases?: Array<{ index?: number; expectedOutput?: string; actualOutput?: string; passed?: boolean }>
+    }
+    if (result.terminalError) {
+      const verdict = result.judgeInfo?.message || result.sandboxMessage || '运行失败'
+      return { title: verdict, evidence: '依据：本次沙箱运行状态。', next: '先查看编译或运行错误，再让助手结合当前代码定位原因。' }
+    }
+    const failed = result.cases?.find(item => item.passed === false)
+    if (failed) {
+      return {
+        title: `公开样例 ${failed.index || 1} 未通过`,
+        evidence: `依据：样例预期 ${String(failed.expectedOutput ?? '').slice(0, 100)}；当前输出 ${String(failed.actualOutput ?? '').slice(0, 100)}。`,
+        next: '先核对输入读取和输出格式，再检查计算逻辑。仅凭输出差异不能确定具体代码错误。',
+      }
+    }
+    if (result.allSamplePassed) {
+      return {
+        title: '公开样例已通过',
+        evidence: '依据：本次公开样例的运行与输出比对。',
+        next: result.suspectedShortcut ? '代码可能只输出固定值；请确认它会读取输入，并提交以验证隐藏用例。' : '继续提交代码验证隐藏用例；样例通过不代表整题通过。',
+      }
+    }
+  } catch { /* 旧版非 JSON 运行摘要继续交给聊天上下文处理。 */ }
+  return null
+})
+
+function askRunDiagnosis() {
+  if (inputDisabled.value) return
+  activeTab.value = 'chat'
+  void stream.sendUserMessage('请根据刚才的运行诊断、题面、公开样例和当前代码，说明最可能的问题、每项判断的依据，以及我下一步该检查什么。信息不足时明确说不确定，不要给完整可提交答案。', listRef.value)
+}
+
+function onModelChange() {
+  stream.stopGeneration()
+  store.clearChat()
+  Message.info('已切换模型，开始新的对话')
+}
 
 function onSend() {
   if (aiAssistBanned.value) return
@@ -176,9 +228,9 @@ function startWelcomeTypewriter() {
 }
 
 watch(
-  () => props.questionId,
-  (id) => {
-    if (id) store.bindSession(id)
+  () => [props.questionId, auth.userId, aiModels.selectedProvider, aiModels.selectedModel] as const,
+  ([id, userId, providerCode, modelId]) => {
+    if (id) store.bindSession(`${userId || 'guest'}:${id}:${providerCode}:${modelId}`)
   },
   { immediate: true },
 )
@@ -298,6 +350,12 @@ onBeforeUnmount(() => {
             <span class="context-strip__dot" />
             <div><strong>OJ 上下文已同步</strong><small>题面 · 公开样例 · 当前代码<span v-if="props.runResult"> · 运行结果</span></small></div>
             <span class="context-strip__type">{{ props.questionType.startsWith('IMAGE_') ? '图像题' : '编程题' }}</span>
+          </div>
+          <div class="tw-relative tw-z-10 tw-mx-4 tw-mb-3"><AiModelPicker :disabled="sending" @change="onModelChange" /></div>
+          <div v-if="runDiagnosis" class="tw-relative tw-z-10 tw-mx-4 tw-mb-3 tw-rounded-xl tw-border tw-border-teal-500/25 tw-bg-teal-500/[0.07] tw-p-3 tw-text-xs tw-leading-relaxed tw-text-zinc-700 dark:tw-text-zinc-200">
+            <div class="tw-flex tw-items-center tw-justify-between tw-gap-2"><strong>本次运行诊断 · {{ runDiagnosis.title }}</strong><button type="button" class="tw-shrink-0 tw-font-semibold tw-text-teal-700 disabled:tw-opacity-40 dark:tw-text-teal-300" :disabled="inputDisabled" @click="askRunDiagnosis">让 AI 结合代码分析 →</button></div>
+            <p class="tw-m-0 tw-mt-2">{{ runDiagnosis.evidence }}</p>
+            <p class="tw-m-0 tw-mt-1 tw-text-zinc-500 dark:tw-text-zinc-400">下一步：{{ runDiagnosis.next }}</p>
           </div>
           <div class="tw-relative tw-z-10 tw-mx-4 tw-mb-2">
             <ModerationBanNotice

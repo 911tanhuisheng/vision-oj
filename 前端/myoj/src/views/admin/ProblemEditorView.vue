@@ -11,9 +11,12 @@ import { AUTH_STORAGE_KEY } from '@/config/auth-storage'
 import { API_BASE_URL } from '@/config/api'
 import axios from 'axios'
 import { PROBLEM_DIFFICULTIES, PROBLEM_KNOWLEDGE_TAGS } from '@/config/problemTaxonomy'
+import AiModelPicker from '@/components/study/ai/AiModelPicker.vue'
+import { useAiModelsStore } from '@/stores/aiModels'
 
 const route = useRoute()
 const router = useRouter()
+const aiModels = useAiModelsStore()
 const layoutTheme = inject(LAYOUT_THEME_KEY, null)
 const themeLight = computed(() => (layoutTheme ? layoutTheme.value === 'light' : true))
 const DRAFT_KEY = 'myoj.problem.editor.draft.v1'
@@ -21,12 +24,26 @@ const DRAFT_TTL_MS = 15 * 60 * 1000 // 15分钟自动清理这个草稿
 
 const isEditMode = computed(() => Boolean(route.params.id))
 const submitting = ref(false)
+const preflightBusy = ref(false)
+const preflightResult = ref<{ ready: boolean; checks: Array<{ name: string; passed: boolean; detail: string }> } | null>(null)
+const preflightError = ref('')
+const preflightSnapshot = ref('')
+const visiblePreflight = computed(() => preflightSnapshot.value === JSON.stringify(buildProblemPayload()) ? preflightResult.value : null)
 const imageUploading = ref(false)
 const hiddenImagesUploading = ref(false)
 const visionDetecting = ref(false)
 const imageGenerating = ref(false)
 const imageGeneratePrompt = ref('')
 const imageGenerateError = ref('')
+const imageSource = ref<'UPLOAD' | 'LOCAL_COMFYUI' | 'DASHSCOPE'>('LOCAL_COMFYUI')
+const generationModels = ref<{ local: string[]; cloud: string[] }>({ local: [], cloud: ['qwen-image-2.1-turbo', 'qwen-image-2.1-pro'] })
+const generationModel = ref('')
+const generatedPreview = ref<{ url: string; prompt: string; source: 'LOCAL_COMFYUI' | 'DASHSCOPE'; modelId: string } | null>(null)
+const hiddenGenerationBusy = ref(false)
+const generatedCasesReady = ref(false)
+const generationPending = ref(false)
+const imageGenerationSource = ref('')
+const imageGenerationModel = ref('')
 const smartImportImageUrl = ref('')
 const smartImportPreview = ref('')
 const smartImportOcrText = ref('')
@@ -285,6 +302,12 @@ async function uploadQuestionImage(event: Event) {
       return
     }
     form.value.imageUrl = res.data.data
+    form.value.judgeCase = []
+    generatedPreview.value = null
+    generationPending.value = false
+    generatedCasesReady.value = false
+    imageGenerationSource.value = ''
+    imageGenerationModel.value = ''
     visionAnnotation.value = null
     Message.success('题图上传成功')
   } catch (error) {
@@ -401,7 +424,7 @@ async function runSmartProblemImport() {
     smartImportOcrText.value = ocr.data.data.ocr_text.trim()
     const structured = await axios.post<{ code?: number; message?: string; data?: StructuredProblem }>(
       `${API_BASE_URL}/bailian_assist/structure-problem`,
-      { ocrText: smartImportOcrText.value },
+      { ocrText: smartImportOcrText.value, providerCode: aiModels.selectedProvider, modelId: aiModels.selectedModel || undefined },
       { headers },
     )
     if (!isResultSuccess(structured.data.code) || !structured.data.data) {
@@ -420,12 +443,20 @@ async function runSmartProblemImport() {
   }
 }
 
+function normalizeOjStatement(content: string): string {
+  return content
+    .replace(/\$([^$\n]+)\$/g, (_, math: string) => math
+      .replace(/\\leq?/g, '≤').replace(/\\geq?/g, '≥')
+      .replace(/10\^9/g, '1,000,000,000').replace(/2\^\{31\}-1/g, '2,147,483,647'))
+    .replace(/^```\r?\n([^\r\n]+)\r?\n```$/gm, '`$1`')
+}
+
 function applyStructuredProblem(data: StructuredProblem) {
   form.value.questionType = 'TEXT'
   form.value.imageUrl = ''
   form.value.countTolerance = 0
   if (data.title?.trim()) form.value.title = data.title.trim()
-  if (data.content?.trim()) form.value.content = data.content.trim()
+  if (data.content?.trim()) form.value.content = normalizeOjStatement(data.content.trim())
   if (data.answer?.trim()) form.value.answer = data.answer.trim()
   if (data.judgeCase?.length) form.value.judgeCase = data.judgeCase.map((item, index) => ({ input: item.input || '', output: item.output || '', sample: index === 0 }))
   if (data.judgeConfig) form.value.judgeConfig = { ...form.value.judgeConfig, ...data.judgeConfig }
@@ -443,7 +474,7 @@ async function runAiProblemGenerate() {
     const token = getToken()
     const response = await axios.post<{ code?: number; message?: string; data?: StructuredProblem }>(
       `${API_BASE_URL}/bailian_assist/structure-problem`,
-      { ocrText: prompt, mode: 'GENERATE' },
+      { ocrText: prompt, mode: 'GENERATE', providerCode: aiModels.selectedProvider, modelId: aiModels.selectedModel || undefined },
       { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
     )
     if (!isResultSuccess(response.data.code) || !response.data.data) {
@@ -496,6 +527,7 @@ async function detectObjects() {
     } else {
       Message.success(`一键出题完成：已识别 ${Object.keys(counts).length} 个类别，并填充全部题目信息`)
     }
+    return res.data.data
   } catch (error) {
     Message.error(getBackendErrorMessage(error, 'YOLO 识别服务不可用'))
   } finally {
@@ -509,42 +541,133 @@ async function generateVisionProblemImage() {
   if (!form.value.questionType?.startsWith('IMAGE_')) return void Message.warning('请先选择图像编程题类型')
   imageGenerating.value = true
   imageGenerateError.value = ''
-  visionAnnotation.value = null
+  generatedCasesReady.value = false
+  if (generatedPreview.value && form.value.imageUrl === generatedPreview.value.url) {
+    form.value.imageUrl = ''
+    form.value.judgeCase = []
+    visionAnnotation.value = null
+    generationPending.value = false
+  }
+  generatedPreview.value = null
   try {
-    const token = getToken()
-    const res = await axios.post<{
-      code?: number
-      message?: string
-      data?: { imageUrl?: string; seed?: number; generationMs?: number }
-    }>(`${API_BASE_URL}/vision/generate-image`, {
-      prompt, width: 512, height: 512, steps: 20,
-    }, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
-    if (!isResultSuccess(res.data.code) || !res.data.data?.imageUrl) throw new Error(res.data.message || 'AI 未返回图片')
-    form.value.imageUrl = res.data.data.imageUrl
-    Message.success(`AI 题图已生成（${res.data.data.generationMs ?? '-'} ms），正在识别并自动填充`)
-    await detectObjects()
-    // 再生成两张不同随机种子的图片作为隐藏用例，避免公开样例被硬编码即可通过。
-    let hiddenCreated = 0
-    for (let i = 0; i < 2; i++) {
-      const hidden = await axios.post<{
-        code?: number
-        message?: string
-        data?: { imageUrl?: string }
-      }>(`${API_BASE_URL}/vision/generate-image`, {
-        prompt, width: 512, height: 512, steps: 20,
-      }, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
-      if (!isResultSuccess(hidden.data.code) || !hidden.data.data?.imageUrl) throw new Error(hidden.data.message || '隐藏题图生成失败')
-      const annotation = await annotateImage(hidden.data.data.imageUrl)
-      form.value.judgeCase?.push({ input: hidden.data.data.imageUrl, output: annotationOutput(annotation), sample: false })
-      hiddenCreated++
-    }
-    Message.success(`AI 完整出题完成：1 个公开样例 + ${hiddenCreated} 个隐藏用例`)
+    if (imageSource.value === 'UPLOAD') throw new Error('请先选择本地或云端生图')
+    const source = imageSource.value
+    const modelId = generationModel.value
+    if (!modelId) throw new Error('请先选择生图模型')
+    const url = await requestGeneratedImage(prompt, source, modelId)
+    generatedPreview.value = { url, prompt, source, modelId }
+    Message.success('预览图已生成，确认满意后再生成隐藏用例')
   } catch (error) {
     const message = getBackendErrorMessage(error, error instanceof Error ? error.message : 'AI 题图生成失败')
     imageGenerateError.value = message
     Message.error(message)
   } finally {
     imageGenerating.value = false
+  }
+}
+
+function selectImageSource(source: 'UPLOAD' | 'LOCAL_COMFYUI' | 'DASHSCOPE') {
+  if (imageGenerating.value || hiddenGenerationBusy.value) return
+  if (imageSource.value === source) return
+  if (form.value.imageUrl) {
+    form.value.imageUrl = ''
+    form.value.judgeCase = []
+    visionAnnotation.value = null
+    imageGenerationSource.value = ''
+    imageGenerationModel.value = ''
+    generationPending.value = false
+    Message.info('已清空上一来源的题图和用例，请重新生成或上传')
+  }
+  imageSource.value = source
+  generatedPreview.value = null
+  generatedCasesReady.value = false
+  imageGenerateError.value = ''
+  generationModel.value = source === 'DASHSCOPE' ? 'qwen-image-2.1-turbo' : generationModels.value.local[0] || ''
+}
+
+function discardGeneratedPreview() {
+  if (generatedPreview.value && form.value.imageUrl === generatedPreview.value.url) {
+    form.value.imageUrl = ''
+    form.value.judgeCase = []
+    visionAnnotation.value = null
+  }
+  generatedPreview.value = null
+  generationPending.value = false
+  generatedCasesReady.value = false
+  imageGenerateError.value = ''
+}
+
+async function loadGenerationModels() {
+  try {
+    const token = getToken()
+    const res = await axios.get<{ code?: number; data?: { local?: string[]; cloud?: string[] } }>(
+      `${API_BASE_URL}/vision/generation-models`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+    )
+    if (isResultSuccess(res.data.code) && res.data.data) {
+      generationModels.value = { local: res.data.data.local || [], cloud: res.data.data.cloud || [] }
+      const available = imageSource.value === 'DASHSCOPE' ? generationModels.value.cloud : generationModels.value.local
+      if (!available.includes(generationModel.value)) generationModel.value = available[0] || ''
+    }
+  } catch { /* 模型目录不可用时，生成按钮会提示重新检查服务。 */ }
+}
+
+async function requestGeneratedImage(prompt: string, source: 'LOCAL_COMFYUI' | 'DASHSCOPE', modelId: string): Promise<string> {
+  const token = getToken()
+  const res = await axios.post<{ code?: number; message?: string; data?: { imageUrl?: string } }>(
+    `${API_BASE_URL}/vision/generate-image`, { prompt, source, modelId, width: 512, height: 512, steps: 20 },
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined, timeout: 200000 },
+  )
+  if (!isResultSuccess(res.data.code) || !res.data.data?.imageUrl) throw new Error(res.data.message || 'AI 未返回图片')
+  return res.data.data.imageUrl
+}
+
+async function acceptGeneratedPreview() {
+  const preview = generatedPreview.value
+  if (!preview || hiddenGenerationBusy.value) return
+  hiddenGenerationBusy.value = true
+  imageGenerateError.value = ''
+  generationPending.value = true
+  generatedCasesReady.value = false
+  try {
+    form.value.imageUrl = preview.url
+    visionAnnotation.value = null
+    form.value.judgeCase = []
+    const annotation = await detectObjects()
+    if (!annotation) throw new Error('题图已生成但识别失败，请检查 YOLO/OCR 服务后重新识别')
+    const detectedLabels = Object.keys(annotation.counts || {})
+    const mainLabel = detectedLabels[0] || ''
+    const plural = mainLabel === 'bus' ? 'buses' : mainLabel === 'person' ? 'people' : `${mainLabel}s`
+    const hiddenPrompts = form.value.questionType === 'IMAGE_OBJECT_COUNT' && mainLabel
+      ? [
+          `A clear realistic photograph of exactly two separate ${plural}, full objects visible, simple background, no text`,
+          `A clear realistic photograph of an empty outdoor scene with no ${plural}, no people, no text`,
+        ]
+      : [
+          `${preview.prompt}, alternate scene with different objects and arrangement, clear full view`,
+          `${preview.prompt}, distinct background and lighting, different object arrangement, clear full view`,
+        ]
+    // 隐藏题图使用变化场景，生成后仍以实际识别结果验题；数量并不由提示词保证。
+    let hiddenCreated = 0
+    for (const hiddenPrompt of hiddenPrompts) {
+      const url = await requestGeneratedImage(hiddenPrompt, preview.source, preview.modelId)
+      const annotation = await annotateImage(url)
+      form.value.judgeCase?.push({ input: url, output: annotationOutput(annotation), sample: false })
+      hiddenCreated++
+    }
+    generatedCasesReady.value = true
+    generationPending.value = false
+    imageGenerationSource.value = preview.source
+    imageGenerationModel.value = preview.modelId
+    generatedPreview.value = null
+    Message.success(`AI 完整出题完成：1 个公开样例 + ${hiddenCreated} 个隐藏用例`)
+  } catch (error) {
+    // Retrying adoption starts from a clean sample and never accumulates partial hidden cases.
+    form.value.judgeCase = []
+    const message = getBackendErrorMessage(error, error instanceof Error ? error.message : 'AI 题图生成失败')
+    imageGenerateError.value = message
+    Message.error(message)
+  } finally {
+    hiddenGenerationBusy.value = false
   }
 }
 
@@ -600,9 +723,7 @@ function buildVisionReferenceAnswer(): string {
 import contextlib
 import io
 import json
-import os
 
-os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     from ultralytics import YOLO
 
@@ -710,7 +831,7 @@ async function loadQuestionForEdit() {
     const data = await Service.adminPageQuestions({
       current: 1,
       pageSize: 1,
-      id: id as unknown as number,
+      id,
     })
     if (!isResultSuccess(data.code)) {
       Message.error(data.message || '加载题目失败')
@@ -721,10 +842,11 @@ async function loadQuestionForEdit() {
       Message.error('题目不存在或已删除')
       return
     }
+    const formattedContent = normalizeOjStatement(item.content || '')
     form.value = {
       ...form.value,
       title: item.title || '',
-      content: item.content || '',
+      content: formattedContent,
       answer: item.answer || '',
       questionType: item.questionType || 'TEXT',
       imageUrl: item.imageUrl || '',
@@ -735,18 +857,22 @@ async function loadQuestionForEdit() {
       tags: item.tags || [],
     }
     tags.value = Array.isArray(item.tags) ? item.tags : []
+    const generation = item as typeof item & { generationSource?: string; generationModel?: string }
+    imageGenerationSource.value = generation.generationSource || ''
+    imageGenerationModel.value = generation.generationModel || ''
+    imageSource.value = generation.generationSource === 'DASHSCOPE' ? 'DASHSCOPE' : generation.generationSource === 'LOCAL_COMFYUI' ? 'LOCAL_COMFYUI' : 'UPLOAD'
+    generationModel.value = generation.generationModel || generationModel.value
+    if (formattedContent !== (item.content || '')) Message.info('已整理题面中的公式和样例格式，请检查后保存修改')
   } catch (error) {
     Message.error(getBackendErrorMessage(error, '加载题目失败'))
   }
 }
 
-async function submitProblem() {
-  if (!validate()) return
-
-  submitting.value = true
-  try {
-    const payload: QuestionAddRequest = {
+function buildProblemPayload(): QuestionAddRequest & { generationSource?: string; generationModel?: string } {
+  return {
       ...form.value,
+      generationSource: form.value.questionType?.startsWith('IMAGE_') ? (imageGenerationSource.value || 'UPLOAD') : undefined,
+      generationModel: imageGenerationModel.value || undefined,
       title: form.value.title?.trim(),
       content: form.value.content?.trim(),
       answer: form.value.answer?.trim(),
@@ -756,16 +882,66 @@ async function submitProblem() {
         output: c.output?.trim() || '',
         sample: c.sample === true,
       })),
+  }
+}
+
+async function preflightProblem(payload = buildProblemPayload()): Promise<boolean> {
+  preflightBusy.value = true
+  preflightError.value = ''
+  preflightResult.value = null
+  const snapshot = JSON.stringify(payload)
+  try {
+    const token = getToken()
+    const res = await axios.post<{
+      code?: number
+      message?: string
+      data?: { ready: boolean; checks: Array<{ name: string; passed: boolean; detail: string }> }
+    }>(`${API_BASE_URL}/question/admin/preflight`, payload,
+      { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+    if (!isResultSuccess(res.data.code) || !res.data.data) throw new Error(res.data.message || '验题服务未返回结果')
+    if (JSON.stringify(buildProblemPayload()) !== snapshot) {
+      preflightError.value = '验题期间题目已修改，请重新验题'
+      return false
+    }
+    preflightResult.value = res.data.data
+    preflightSnapshot.value = snapshot
+    return res.data.data.ready
+  } catch (error) {
+    preflightError.value = getBackendErrorMessage(error, '验题失败，请检查判题服务后重试')
+    return false
+  } finally {
+    preflightBusy.value = false
+  }
+}
+
+async function runPreflight() {
+  if (!validate()) return
+  const ready = await preflightProblem()
+  if (ready) Message.success('验题通过，请最后人工核对题图和标准答案')
+}
+
+async function submitProblem() {
+  if (!validate() || submitting.value) return
+  if (generatedPreview.value || generationPending.value) return void Message.warning('请先确认题图并完成隐藏用例生成')
+
+  submitting.value = true
+  try {
+    const payload = buildProblemPayload()
+    if (payload.questionType?.startsWith('IMAGE_') && !await preflightProblem(payload)) {
+      Message.warning('验题未通过，已暂停发布；请查看下方检查结果')
+      return
     }
     if (isEditMode.value) {
-      const updateBody: QuestionUpdateRequest = {
-        id: String(route.params.id || '').trim() as unknown as number,
+      const updateBody: QuestionUpdateRequest & { generationSource?: string; generationModel?: string } = {
+        id: String(route.params.id || '').trim(),
         title: payload.title ?? '',
         content: payload.content ?? '',
         answer: payload.answer ?? '',
         questionType: payload.questionType || 'TEXT',
         imageUrl: payload.imageUrl || '',
         visionModelKey: payload.visionModelKey || 'YOLO_GENERAL',
+        generationSource: (payload as QuestionAddRequest & { generationSource?: string }).generationSource,
+        generationModel: (payload as QuestionAddRequest & { generationModel?: string }).generationModel,
         countTolerance: payload.countTolerance ?? 0,
         tags: payload.tags ?? [],
         judgeCase: payload.judgeCase ?? [],
@@ -840,6 +1016,7 @@ function isDraftExpired(savedAt?: number): boolean {
 }
 
 onMounted(async () => {
+  void loadGenerationModels()
   if (!isEditMode.value && typeof window !== 'undefined') {
     const raw = window.localStorage.getItem(DRAFT_KEY)
     if (raw) {
@@ -1027,6 +1204,7 @@ watch(
             </a-form-item>
             <Transition name="form-reveal">
             <section v-if="form.questionType === 'TEXT'" class="smart-import-card">
+              <AiModelPicker :disabled="smartImportRunning || aiGenerating" />
               <div class="smart-import-card__intro">
                 <span class="smart-import-card__icon">AI</span>
                 <div>
@@ -1103,23 +1281,42 @@ watch(
                 <div class="vision-field-stack">
                 <div class="vision-generator">
                   <div class="vision-generator__head">
-                    <div><strong>✦ AI 生成图像编程题</strong><p>输入场景后，系统会生成图片、转存 MinIO、YOLO/OCR 校验，并填充全部出题字段。</p></div>
-                    <span>ComfyUI · 本地 GPU</span>
+                    <div><strong>题图来源</strong><p>生图模型负责生成素材；上方识别模型负责标注和判题依据。</p></div>
                   </div>
-                  <div class="vision-generator__input">
+                  <div class="generation-source-options">
+                    <button type="button" :disabled="imageGenerating || hiddenGenerationBusy" :class="{ active: imageSource === 'UPLOAD' }" @click="selectImageSource('UPLOAD')">上传图片</button>
+                    <button type="button" :disabled="imageGenerating || hiddenGenerationBusy" :class="{ active: imageSource === 'LOCAL_COMFYUI' }" @click="selectImageSource('LOCAL_COMFYUI')">本地 GPU</button>
+                    <button type="button" :disabled="imageGenerating || hiddenGenerationBusy" :class="{ active: imageSource === 'DASHSCOPE' }" @click="selectImageSource('DASHSCOPE')">百炼云端生图</button>
+                  </div>
+                  <div v-if="imageSource !== 'UPLOAD'" class="generation-model-row">
+                    <label for="generation-model">生图模型</label>
+                    <select id="generation-model" v-model="generationModel">
+                      <option v-for="name in imageSource === 'DASHSCOPE' ? generationModels.cloud : generationModels.local" :key="name" :value="name">{{ name }}</option>
+                    </select>
+                    <small v-if="imageSource === 'LOCAL_COMFYUI' && !generationModels.local.length">未检测到允许使用的本地模型，请检查 ComfyUI</small>
+                    <small v-if="imageSource === 'DASHSCOPE'">使用账号设置中的个人百炼 Key；云端生图可能按张计费。</small>
+                  </div>
+                  <div v-if="imageSource !== 'UPLOAD'" class="vision-generator__input">
                     <a-textarea v-model="imageGeneratePrompt" :auto-size="{ minRows: 2, maxRows: 4 }" placeholder="例如：a realistic street photo with one bus and three people, full objects, daylight" />
-                    <a-button type="primary" status="success" :loading="imageGenerating" :disabled="!imageGeneratePrompt.trim()" @click="generateVisionProblemImage">
-                      {{ imageGenerating ? 'AI 生成与校验中…' : '✦ 生成图片并自动出题' }}
+                    <a-button type="primary" status="success" :loading="imageGenerating" :disabled="!imageGeneratePrompt.trim() || !generationModel || hiddenGenerationBusy" @click="generateVisionProblemImage">
+                      {{ imageGenerating ? '生成预览中…' : '生成一张预览图' }}
                     </a-button>
                   </div>
+                  <div v-if="generatedPreview" class="generation-preview">
+                    <img :src="generatedPreview.url" alt="待确认的生图预览" />
+                    <div><strong>这张题图可以使用吗？</strong><p>确认后才会识别题图并生成两张隐藏图片。云端模式下这两张图片也可能产生费用。</p>
+                      <a-button type="primary" :loading="hiddenGenerationBusy" @click="acceptGeneratedPreview">采用并补齐隐藏用例</a-button>
+                      <a-button :disabled="hiddenGenerationBusy" @click="discardGeneratedPreview">放弃预览</a-button>
+                    </div>
+                  </div>
+                  <p v-if="generatedCasesReady && imageGenerationSource" class="vision-generator__tip">已生成公开题图和两张隐藏用例；使用 {{ imageGenerationSource === 'DASHSCOPE' ? '百炼云端' : '本地 GPU' }} · {{ imageGenerationModel }}。发布前请验题并复核标注。</p>
                   <div v-if="imageGenerateError" class="smart-import-error" role="alert">
                     <span>!</span><div><strong>题图生成失败</strong><p>{{ imageGenerateError }}</p></div>
                     <button type="button" aria-label="关闭错误提示" @click="imageGenerateError = ''">×</button>
                   </div>
-                  <p class="vision-generator__tip">AI 无法保证精确数量，标准答案以生成后 YOLO/OCR 的实际校验结果为准，发布前请人工复核。</p>
+                  <p class="vision-generator__tip">AI 无法保证精确数量，标准答案以 YOLO/OCR 实际识别结果为准，发布前请人工复核。</p>
                 </div>
-                <div class="vision-source-divider"><span>或上传自己的图片</span></div>
-                <div class="vision-upload">
+                <div v-if="imageSource === 'UPLOAD'" class="vision-upload">
                   <a-input v-model="form.imageUrl" readonly allow-clear placeholder="请上传图片，系统将统一保存到 MinIO" />
                   <label class="vision-upload__button">
                     {{ imageUploading ? '上传中…' : '上传图片' }}
@@ -1348,13 +1545,20 @@ watch(
       </div>
     </section>
 
+    <section v-if="visiblePreflight || preflightError" class="preflight-panel panel" aria-live="polite">
+      <strong>{{ visiblePreflight?.ready ? '验题通过' : '验题需要处理' }}</strong>
+      <p v-if="preflightError">{{ preflightError }}</p>
+      <ul v-if="visiblePreflight"><li v-for="item in visiblePreflight.checks" :key="item.name" :class="item.passed ? 'preflight-ok' : 'preflight-fail'">{{ item.passed ? '✓' : '!' }} {{ item.name }}：{{ item.detail }}</li></ul>
+    </section>
     <div class="action-row panel" role="group" aria-label="题目操作">
       <div class="action-row__glow" aria-hidden="true" />
+      <a-button size="large" class="action-btn action-btn--ghost" :loading="preflightBusy" :disabled="submitting" @click="runPreflight">先验题</a-button>
       <a-button
         type="primary"
         size="large"
         class="action-btn action-btn--primary"
         :loading="submitting"
+        :disabled="preflightBusy"
         :aria-label="isEditMode ? '保存修改并提交题目' : '发布题目'"
         @click="submitProblem"
       >
@@ -1667,6 +1871,8 @@ watch(
     0 14px 30px rgba(15, 23, 42, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
+
+
 
 .md-editor__bar,
 .answer-editor__bar {
@@ -1997,6 +2203,18 @@ watch(
 .vision-generator__head p, .vision-generator__tip { margin: 4px 0 0; color: var(--app-text-muted); line-height: 1.65; }
 .vision-generator__head > span { flex: none; padding: 4px 9px; border-radius: 999px; color: #047857; background: rgba(16, 185, 129, .14); font-size: 12px; }
 .vision-generator__input { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; }
+.generation-source-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.generation-source-options button { border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 12px; background: var(--app-surface); color: var(--app-text); cursor: pointer; }
+.generation-source-options button.active { border-color: var(--app-accent); background: color-mix(in srgb, var(--app-accent) 14%, var(--app-surface)); color: var(--app-text); font-weight: 700; }
+.generation-source-options button:disabled { cursor: wait; opacity: .65; }
+.generation-model-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--app-text); }
+.generation-model-row select { min-width: 210px; max-width: 100%; padding: 8px; border: 1px solid var(--app-border); border-radius: 9px; background: var(--app-surface); color: var(--app-text); }
+.generation-model-row small { color: var(--app-text-muted); }
+.generation-preview { display: grid; grid-template-columns: minmax(120px, 210px) 1fr; gap: 14px; align-items: center; margin-top: 14px; padding: 12px; border: 1px solid rgba(15,157,139,.28); border-radius: 12px; background: var(--app-surface); }
+.generation-preview img { display: block; width: 100%; max-height: 210px; object-fit: contain; border-radius: 8px; }
+.generation-preview p { color: var(--app-text-muted); line-height: 1.6; }
+.generation-preview button { margin: 4px 8px 4px 0; }
+@media (max-width: 600px) { .generation-preview { grid-template-columns: 1fr; } }
 .vision-generator__tip { font-size: 12px; }
 .vision-source-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0; color: var(--app-text-muted); font-size: 12px; }
 .vision-source-divider::before, .vision-source-divider::after { content: ''; flex: 1; height: 1px; background: var(--color-border-2); }
@@ -2336,6 +2554,10 @@ watch(
     linear-gradient(120deg, rgba(15, 140, 122, 0.12), rgba(59, 130, 246, 0.08) 42%, rgba(255, 138, 61, 0.1)),
     var(--app-surface);
 }
+.preflight-panel { margin-top: 16px; padding: 16px 20px; color: var(--app-text); }
+.preflight-panel p { margin: 8px 0 0; color: #b45309; }
+.preflight-panel ul { margin: 10px 0 0; padding-left: 0; list-style: none; display: grid; gap: 7px; font-size: 13px; line-height: 1.5; }
+.preflight-ok { color: #0f8c7a; }.preflight-fail { color: #b45309; }
 
 .action-row__glow {
   position: absolute;

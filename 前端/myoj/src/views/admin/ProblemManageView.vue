@@ -145,7 +145,7 @@ async function requestDelete(ids: string[], tip: string) {
   deleting.value = true
   try {
     const data = await Service.adminBatchDeleteQuestions({
-      ids: ids as unknown as number[],
+      ids,
     })
     if (!isResultSuccess(data.code)) {
       Message.error(data.message || '删除失败')

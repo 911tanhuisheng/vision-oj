@@ -5,7 +5,7 @@
 import type { ContestRankCellVO } from './ContestRankCellVO';
 export type ContestRankRowVO = {
     rankOrder?: number;
-    userId?: number;
+    userId?: string;
     userName?: string;
     solvedCount?: number;
     totalPenalty?: number;

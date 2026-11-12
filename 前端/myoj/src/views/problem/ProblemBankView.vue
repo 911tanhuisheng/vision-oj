@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import { OpenAPI, Service } from '@generated'
 import type { QuestionQueryRequest } from '@generated'
@@ -22,10 +22,13 @@ type ProblemRow = {
   updateTime?: string
 }
 
+type StudyRecommendation = { questionId: string; title: string; questionType: string; focusTag: string; reason: string }
+
 const loading = ref(false)
 const router = useRouter()
 const auth = useAuthStore()
 const rows = ref<ProblemRow[]>([])
+const recommendations = ref<StudyRecommendation[]>([])
 const total = ref(0)
 const current = ref(1)
 const pageSize = ref(10)
@@ -87,6 +90,25 @@ async function fetchList() {
     Message.error(mapApiError(error, getBackendErrorMessage(error, '获取题库失败')))
   } finally {
     loading.value = false
+  }
+}
+
+async function loadRecommendations() {
+  recommendations.value = []
+  if (!auth.isLoggedIn || !auth.userId) return
+  const requestedUserId = auth.userId
+  try {
+    const token = typeof OpenAPI.TOKEN === 'function' ? await OpenAPI.TOKEN({} as never) : OpenAPI.TOKEN
+    const response = await fetch(`${OpenAPI.BASE.replace(/\/+$/, '')}/question/recommend/my`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: 'no-store',
+    })
+    const body = await response.json() as { code?: number; data?: StudyRecommendation[] }
+    if (auth.userId === requestedUserId && response.ok && isResultSuccess(body.code)) {
+      recommendations.value = Array.isArray(body.data) ? body.data : []
+    }
+  } catch {
+    // 推荐服务不可用时保留正常题库，避免把个性化功能变成做题入口的故障点。
   }
 }
 
@@ -187,7 +209,8 @@ function goSolve(item: ProblemRow) {
   router.push({ name: 'problem-solve', params: { id: item.id } })
 }
 
-onMounted(fetchList)
+onMounted(() => { void fetchList(); void loadRecommendations() })
+watch(() => auth.userId, () => { void loadRecommendations() })
 </script>
 
 <template>
@@ -202,6 +225,18 @@ onMounted(fetchList)
         <span class="meta-chip">总题数 {{ total }}</span>
         <span class="meta-chip">当前第 {{ current }} / {{ totalPages }} 页</span>
         <span class="meta-chip">{{ loading ? '同步中' : '已同步' }}</span>
+      </div>
+    </section>
+
+    <section v-if="recommendations.length" class="recommend-panel panel" aria-label="个性化练习推荐">
+      <div class="recommend-panel__heading"><div><span class="eyebrow">为你推荐</span><h2>下一步练什么</h2></div><span class="recommend-panel__caption">依据你的提交记录与题目标签</span></div>
+      <div class="recommend-panel__grid">
+        <button v-for="item in recommendations" :key="item.questionId" type="button" class="recommend-card" @click="goSolve({ id: item.questionId, title: item.title, questionType: item.questionType })">
+          <span class="recommend-card__tag">{{ item.focusTag || problemTypeLabel(item.questionType) }}</span>
+          <strong>{{ item.title }}</strong>
+          <small>{{ item.reason }}</small>
+          <span class="recommend-card__action">去练习 →</span>
+        </button>
       </div>
     </section>
 
@@ -452,6 +487,16 @@ h1 {
   margin-top: 18px;
   padding: 20px;
 }
+.recommend-panel { margin-top: 18px; padding: 22px 26px; }
+.recommend-panel__heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.recommend-panel__heading h2 { margin: 0; font-size: 20px; color: var(--app-text); }
+.recommend-panel__heading .eyebrow { display: block; margin-bottom: 5px; }
+.recommend-panel__caption { color: var(--app-text-muted); font-size: 12px; }
+.recommend-panel__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.recommend-card { display: flex; flex-direction: column; align-items: start; gap: 8px; min-height: 140px; text-align: left; cursor: pointer; border: 1px solid var(--app-border); border-radius: 16px; padding: 15px; background: color-mix(in srgb, var(--app-surface) 90%, var(--app-accent) 10%); color: var(--app-text); }
+.recommend-card:hover { border-color: var(--app-accent); transform: translateY(-2px); }
+.recommend-card strong { font-size: 15px; }.recommend-card small { color: var(--app-text-muted); line-height: 1.5; }.recommend-card__tag { color: var(--app-accent); font-size: 11px; font-weight: 800; }.recommend-card__action { margin-top: auto; color: var(--app-accent); font-size: 12px; font-weight: 700; }
+@media (max-width: 800px) { .recommend-panel__grid { grid-template-columns: 1fr; }.recommend-panel__heading { align-items: start; flex-direction: column; } }
 
 .view-switch {
   display: flex;

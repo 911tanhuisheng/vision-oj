@@ -18,6 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,14 +51,21 @@ public class VisionAnnotationController {
     @PostMapping("/generate-image")
     @Operation(summary = "使用本地 ComfyUI 生成图像编程题题图并转存 MinIO")
     public Result<ImageGenerationVO> generateImage(@Valid @RequestBody ImageGenerateRequest request) {
-        requireAdmin();
-        return Result.success(imageGenerationService.generate(request));
+        Long userId = requireAdmin();
+        return Result.success(imageGenerationService.generate(request, userId));
     }
 
-    private void requireAdmin() {
+    @GetMapping("/generation-models")
+    public Result<java.util.Map<String, Object>> generationModels() {
+        requireAdmin();
+        return Result.success(imageGenerationService.catalog());
+    }
+
+    private Long requireAdmin() {
         Long userId = UserContext.getCurrentUserId();
         User user = userId == null ? null : userService.getById(userId);
         if (user == null) throw new BusinessException(ResultCode.NOT_LOGIN_ERROR);
         if (!isAdminRole.isAdminRoleString(user.getUserRole())) throw new BusinessException(ResultCode.NO_AUTH_ERROR);
+        return userId;
     }
 }

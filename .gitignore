@@ -11,6 +11,7 @@ Thumbs.db
 
 # Env & local secrets（勿提交）
 .env
+.sandbox.env
 .runtime-logs/
 .local-ai/
 .env.*
@@ -18,6 +19,7 @@ Thumbs.db
 DELIVERY_MANIFEST.json
 
 **/application-local.yml
+**/*.private-backup.yml
 
 # Java / Maven
 **/target/
@@ -34,10 +36,14 @@ dist-ssr/
 *.local
 
 # Python / Vision AI
+vision-ai/runs/
 **/.venv/
+**/.venv-partial-*/
 **/__pycache__/
 *.py[cod]
 *.pt
+*.pth
+*.tar
 !vision-ai/models/hard-hat-best.pt
 !Sandbox/docker/python-vision/models/hard-hat-best.pt
 

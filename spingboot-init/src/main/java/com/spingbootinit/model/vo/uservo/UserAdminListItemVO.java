@@ -2,6 +2,7 @@ package com.spingbootinit.model.vo.uservo;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -17,6 +18,7 @@ import java.util.Date;
 public class UserAdminListItemVO {
 
     @JsonSerialize(using = ToStringSerializer.class)
+    @Schema(type = "string", description = "用户 ID，作为十进制字符串返回，避免前端整数精度丢失")
     private Long id;
 
     private String username;
@@ -36,6 +38,12 @@ public class UserAdminListItemVO {
     private Date aiBanUntil;
     private String aiBanReason;
     private String lastLoginIp;
+    /** IP 数据库估算的归属地，不代表用户实时位置。 */
+    private String lastLoginRegion;
+    private String lastLoginDevice;
+    private String lastLoginOs;
+    private String lastLoginBrowser;
+    private String lastLoginDeviceDetails;
     private Date lastLoginTime;
     private Integer loginFailCount;
     /** 当前积分 */

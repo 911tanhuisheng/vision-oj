@@ -31,7 +31,7 @@ export class QuestionSubmitControllerService {
      * @throws ApiError
      */
     public static getSubmitStatus(
-        id: number,
+        id: string,
     ): CancelablePromise<ResultMySubmitItemVO> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -48,7 +48,7 @@ export class QuestionSubmitControllerService {
      * @throws ApiError
      */
     public static getSubmitStatusBySubmitNo(
-        questionId: number,
+        questionId: string,
         submitNo: number,
     ): CancelablePromise<ResultMySubmitItemVO> {
         return __request(OpenAPI, {
@@ -94,8 +94,8 @@ export class QuestionSubmitControllerService {
     public static pageAllQuestionSubmitsForAdmin(
         current: number = 1,
         pageSize: number = 10,
-        userId?: number,
-        questionId?: number,
+        userId?: string,
+        questionId?: string,
         submitNo?: number,
     ): CancelablePromise<ResultPageMySubmitItemVO> {
         return __request(OpenAPI, {

@@ -36,6 +36,10 @@ public class QuestionAddRequest implements Serializable {
 
     private String visionModelKey = "YOLO_GENERAL";
 
+    private String generationSource;
+
+    private String generationModel;
+
     private Integer countTolerance = 0;
 
     /**

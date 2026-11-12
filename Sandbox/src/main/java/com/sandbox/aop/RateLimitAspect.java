@@ -73,6 +73,18 @@ public class RateLimitAspect {
      * 注意：不信任客户端透传的 X-User-Id，避免伪造 header 绕过限流。
      */
     private String resolvePrincipalKey(HttpServletRequest request) {
+        // The main OJ service authenticates the student and forwards this header.
+        // Honor it only when the request also carries the shared Sandbox secret.
+        String backendUserId = trimToNull(request.getHeader("X-OJ-User-Id"));
+        String backendKey = trimToNull(request.getHeader("auth"));
+        if (backendUserId != null && backendUserId.matches("[1-9][0-9]{0,18}")
+                && backendKey != null && backendKey.equals(sandboxProperties.getAuth().getKey())) {
+            try {
+                return "uid:" + Long.parseLong(backendUserId);
+            } catch (NumberFormatException ignore) {
+                // An invalid identifier falls back to the source address.
+            }
+        }
         String auth = trimToNull(request.getHeader("Authorization"));
         if (auth != null) {
             String bearerPrefix = "Bearer ";
@@ -89,16 +101,7 @@ public class RateLimitAspect {
     }
 
     private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isBlank()) {
-            return xRealIp.trim();
-        }
-
+        // Sandbox is an internal service; client-supplied forwarding headers are not trusted.
         return request.getRemoteAddr();
     }
 

@@ -29,7 +29,7 @@ public class SandboxProperties {
 
     @Data
     public static class Auth {
-        private String key = "123456";
+        private String key = "";
     }
 
     @Data
@@ -56,7 +56,7 @@ public class SandboxProperties {
          * 并发名额耗尽时，最多等待多久再拒绝（毫秒）。
          * 0 表示不等待，直接拒绝（与旧行为一致）。
          */
-        private long acquireTimeoutMs = 1500L;
+        private long acquireTimeoutMs = 30_000L;
         private long localCompileTimeoutMs = 10_000L;
         private long localRunTimeoutMs = 5_000L;
         private long dockerCompileTimeoutMs = 10_000L;

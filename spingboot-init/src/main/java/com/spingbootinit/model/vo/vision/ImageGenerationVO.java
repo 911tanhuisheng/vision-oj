@@ -10,4 +10,6 @@ public class ImageGenerationVO {
     private String promptId;
     private long seed;
     private long generationMs;
+    private String source;
+    private String modelId;
 }

@@ -7,12 +7,12 @@ export type QuestionQueryRequest = {
     pageSize?: number;
     sortField?: string;
     sortOrder?: string;
-    id?: number;
+    id?: string;
     title?: string;
     questionType?: string;
     tags?: Array<string>;
     content?: string;
-    userId?: number;
+    userId?: string;
     userNickname?: string;
 };
 

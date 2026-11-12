@@ -26,6 +26,7 @@ public class StartupCheckRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        SandboxAuthKeyPolicy.requireStrong(sandboxProperties.getAuth().getKey());
         checkTmpDir();
         checkRedis();
         checkDocker();

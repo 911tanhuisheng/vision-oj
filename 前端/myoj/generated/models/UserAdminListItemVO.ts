@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type UserAdminListItemVO = {
-    id?: number;
+    id?: string;
     username?: string;
     nickname?: string;
     email?: string;

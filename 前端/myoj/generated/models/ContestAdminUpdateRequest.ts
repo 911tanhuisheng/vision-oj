@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { ContestQuestionUpsertItem } from './ContestQuestionUpsertItem';
 export type ContestAdminUpdateRequest = {
-    id: number;
+    id: string;
     title: string;
     description?: string;
     startTime: string;

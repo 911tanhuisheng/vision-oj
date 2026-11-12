@@ -57,6 +57,15 @@ public class UserController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private com.spingbootinit.service.PasswordRecoveryService passwordRecoveryService;
+
+    @Resource
+    private com.spingbootinit.service.EmailBindingService emailBindingService;
+
+    @Resource
+    private com.spingbootinit.service.AiModelSettingsService aiModelSettingsService;
+
     /**
      * 判断是否是管理员
      */
@@ -105,6 +114,19 @@ public class UserController {
     public Result<LoginVO> login(@Valid @RequestBody LoginRequest loginRequest, HttpServletRequest request){
         LoginVO vo = userService.login(loginRequest,request);
         return Result.success("登录成功！",vo);
+    }
+
+    @PostMapping("/password/reset/code")
+    @Operation(summary = "发送找回密码验证码", description = "无需登录，向已绑定邮箱发送一次性验证码")
+    public Result<Void> sendPasswordResetCode(@Valid @RequestBody PasswordResetCodeRequest body, HttpServletRequest request) {
+        return Result.success(passwordRecoveryService.sendCode(body.getEmail(), request), null);
+    }
+
+    @PostMapping("/password/reset")
+    @Operation(summary = "通过邮箱验证码重置密码", description = "无需登录，验证码10分钟有效")
+    public Result<Void> resetPassword(@Valid @RequestBody PasswordResetRequest body) {
+        passwordRecoveryService.resetPassword(body.getEmail(), body.getCode(), body.getNewPassword());
+        return Result.success("密码重置成功，请使用新密码登录", null);
     }
 
     /**
@@ -296,6 +318,20 @@ public class UserController {
         return Result.success("修改成功", null);
     }
 
+    @PostMapping("/account/email/code")
+    @Operation(summary = "发送绑定邮箱验证码")
+    public Result<Void> sendEmailBindingCode(@Valid @RequestBody EmailBindingRequest body) {
+        emailBindingService.sendCode(UserContext.getCurrentUserId(), body.getEmail(), body.getPassword());
+        return Result.success("验证码已发送至新邮箱，10分钟内有效", null);
+    }
+
+    @PostMapping("/account/email/bind")
+    @Operation(summary = "验证并绑定邮箱")
+    public Result<Void> bindEmail(@Valid @RequestBody EmailBindingRequest body) {
+        emailBindingService.bind(UserContext.getCurrentUserId(), body.getEmail(), body.getPassword(), body.getCode());
+        return Result.success("邮箱绑定成功，今后可用邮箱登录和找回密码", null);
+    }
+
     /**
      * 当前用户自助注销账号。
      * <p>
@@ -312,6 +348,7 @@ public class UserController {
             throw new BusinessException(ResultCode.UNAUTHORIZED.getCode(), "请先登录");
         }
         userService.deleteMyAccount(userId, body);
+        aiModelSettingsService.deleteAllForClosedAccount(userId);
         return Result.success("账号已注销", null);
     }
 

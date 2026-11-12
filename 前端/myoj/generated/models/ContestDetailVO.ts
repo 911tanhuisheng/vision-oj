@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { ContestQuestionBriefVO } from './ContestQuestionBriefVO';
 export type ContestDetailVO = {
-    id?: number;
+    id?: string;
     title?: string;
     description?: string;
     startTime?: string;

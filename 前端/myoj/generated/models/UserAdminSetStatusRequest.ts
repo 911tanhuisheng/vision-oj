@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type UserAdminSetStatusRequest = {
-    userId: number;
+    userId: string;
     status: number;
     banHours?: number;
 };

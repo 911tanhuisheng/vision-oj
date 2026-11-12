@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ContestQuestionBriefVO = {
-    questionId?: number;
+    questionId?: string;
     questionTitle?: string;
     fullScore?: number;
     sortOrder?: number;

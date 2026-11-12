@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type LoginVO = {
-    id?: number;
+    id?: string;
     username?: string;
     accessToken?: string;
     refreshToken?: string;

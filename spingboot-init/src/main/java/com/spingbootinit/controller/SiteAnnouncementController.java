@@ -46,7 +46,7 @@ public class SiteAnnouncementController {
 
     @PostMapping("/admin/publish")
     @Operation(summary = "发布公告（管理员）")
-    public Result<Long> adminPublish(@Valid @RequestBody AnnouncementPublishRequest request) {
+    public Result<String> adminPublish(@Valid @RequestBody AnnouncementPublishRequest request) {
         Long uid = UserContext.getCurrentUserId();
         if (uid == null) {
             throw new BusinessException(ResultCode.NOT_LOGIN_ERROR);
@@ -56,6 +56,6 @@ public class SiteAnnouncementController {
             throw new BusinessException(ResultCode.NO_AUTH_ERROR.getCode(), "需要管理员权限");
         }
         long id = siteAnnouncementService.publish(uid, request);
-        return Result.success(id);
+        return Result.success(String.valueOf(id));
     }
 }

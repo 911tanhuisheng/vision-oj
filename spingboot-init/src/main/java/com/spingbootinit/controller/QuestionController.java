@@ -17,6 +17,9 @@ import com.spingbootinit.model.vo.questionvo.QuestionPublicDetailVO;
 import com.spingbootinit.model.vo.questionvo.QuestionRunVO;
 import com.spingbootinit.service.QuestionRunService;
 import com.spingbootinit.service.QuestionService;
+import com.spingbootinit.service.StudyRecommendationEngine;
+import com.spingbootinit.service.StudyRecommendationService;
+import com.spingbootinit.service.QuestionPreflightService;
 import com.spingbootinit.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,6 +45,12 @@ public class QuestionController {
     private QuestionRunService questionRunService;
 
     @Resource
+    private StudyRecommendationService studyRecommendationService;
+
+    @Resource
+    private QuestionPreflightService questionPreflightService;
+
+    @Resource
     private UserService userService;
 
     /**
@@ -57,7 +66,7 @@ public class QuestionController {
      */
     @Operation(summary = "创建题目",description = "创建题目")
     @PostMapping("/add")
-    public Result<Long> addQuestion(@Valid @RequestBody QuestionAddRequest questionAddRequest) {
+    public Result<String> addQuestion(@Valid @RequestBody QuestionAddRequest questionAddRequest) {
         // 校验权限
         Long currentUserId = UserContext.getCurrentUserId();
         if (currentUserId == null) {
@@ -65,7 +74,7 @@ public class QuestionController {
         }
         // 创建题目的逻辑
         long newQuestionId = questionService.createQuestion(questionAddRequest, currentUserId);
-        return Result.success(newQuestionId);
+        return Result.success(String.valueOf(newQuestionId));
     }
 
 
@@ -99,6 +108,26 @@ public class QuestionController {
         // 获取题目详情的逻辑
         QuestionPublicDetailVO vo = questionService.getByIdPublicDetail(id);
         return Result.success(vo);
+    }
+
+    @Operation(summary = "根据我的提交记录推荐练习题")
+    @GetMapping("/recommend/my")
+    public Result<java.util.List<StudyRecommendationEngine.Recommendation>> recommendForMe() {
+        Long userId = UserContext.getCurrentUserId();
+        if (userId == null) throw new BusinessException(ResultCode.NOT_LOGIN_ERROR);
+        return Result.success(studyRecommendationService.recommend(userId));
+    }
+
+    @Operation(summary = "管理员保存前验题")
+    @PostMapping("/admin/preflight")
+    public Result<QuestionPreflightService.PreflightResult> preflight(@Valid @RequestBody QuestionAddRequest request) {
+        Long userId = UserContext.getCurrentUserId();
+        if (userId == null) throw new BusinessException(ResultCode.NOT_LOGIN_ERROR);
+        User user = userService.getById(userId);
+        if (user == null || !isAdminRole.isAdminRoleString(user.getUserRole())) {
+            throw new BusinessException(ResultCode.NO_AUTH_ERROR);
+        }
+        return Result.success(questionPreflightService.check(request));
     }
 
     @Operation(summary = "运行代码（样例）", description = "调用沙箱执行当前代码与题目公开样例（最多 3 组），不入库、不计榜")

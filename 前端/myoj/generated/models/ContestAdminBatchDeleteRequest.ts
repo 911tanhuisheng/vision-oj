@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ContestAdminBatchDeleteRequest = {
-    ids: Array<number>;
+    ids: Array<string>;
 };
 

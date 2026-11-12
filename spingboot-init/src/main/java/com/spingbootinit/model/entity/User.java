@@ -147,6 +147,12 @@ public class User extends BaseEntity{
      */
     private String lastLoginIp;
 
+    /** 最近一次成功登录的浏览器设备类别、系统和浏览器（均为客户端自报，非硬件检测）。 */
+    private String lastLoginDevice;
+    private String lastLoginOs;
+    private String lastLoginBrowser;
+    private String lastLoginDeviceDetails;
+
     /**
      * 用户积分（签到等操作累加；对应表字段 points，默认 0）
      */

@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export type QuestionBatchDeleteRequest = {
-    ids: Array<number>;
+    ids: Array<string>;
 };
 

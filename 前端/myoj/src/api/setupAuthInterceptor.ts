@@ -19,7 +19,7 @@ export type RetryableAxiosConfig = InternalAxiosRequestConfig & {
 
 function isAuthBypassUrl(url?: string): boolean {
   if (!url) return false
-  return /\/user\/(login|refresh|register)(\/|\?|$)/i.test(url)
+  return /\/user\/(login|refresh|register|password\/reset(?:\/code)?)(\/|\?|$)/i.test(url)
 }
 
 function readBodyCode(response: AxiosResponse): number | undefined {

@@ -1,0 +1,14 @@
+.venv/
+.venv-partial-*/
+runs/
+models/
+*.pt
+*.pyc
+__pycache__/
+.env
+.env.*
+README.md
+train_*.py
+finetune_*.py
+evaluate_*.py
+smoke_test_*.py

@@ -2,6 +2,7 @@ package com.spingbootinit.service.impl;
 
 import com.spingbootinit.common.exception.BusinessException;
 import com.spingbootinit.common.result.ResultCode;
+import com.spingbootinit.context.UserContext.UserContext;
 import com.spingbootinit.judo.codesandbox.CodeSandbox;
 import com.spingbootinit.judo.ImageJudgeInputService;
 import com.spingbootinit.judo.codesandbox.CodeSandboxFactory;
@@ -117,6 +118,7 @@ public class QuestionRunServiceImpl implements QuestionRunService {
         ExecuteCodeRequest executeCodeRequest = ExecuteCodeRequest.builder()
                 .code(code)
                 .language(language)
+                .userId(UserContext.getCurrentUserId())
                 .inputList(inputList)
                 .imageBase64List(imageBase64List)
                 .build();

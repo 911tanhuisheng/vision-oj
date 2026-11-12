@@ -30,5 +30,5 @@ public class CodeSandboxProperties {
     /**
      * 鉴权密钥，与 Sandbox {@code sandbox.auth.key} 一致
      */
-    private String authKey = "123456";
+    private String authKey = "";
 }

@@ -28,6 +28,10 @@ public class QuestionUpdateRequest {
 
     private String visionModelKey = "YOLO_GENERAL";
 
+    private String generationSource;
+
+    private String generationModel;
+
     private Integer countTolerance = 0;
 
     @NotEmpty(message = "标签不能为空")

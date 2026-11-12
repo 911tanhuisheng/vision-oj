@@ -29,5 +29,14 @@ public class QuestionVisionSchemaMigration implements ApplicationRunner {
                     "NOT NULL DEFAULT 'YOLO_GENERAL' COMMENT '图像识别模型键' AFTER image_url");
             log.info("Database migration completed: question.vision_model_key added");
         }
+        addColumnIfMissing("generation_source", "ALTER TABLE question ADD COLUMN generation_source VARCHAR(32) DEFAULT NULL AFTER vision_model_key");
+        addColumnIfMissing("generation_model", "ALTER TABLE question ADD COLUMN generation_model VARCHAR(128) DEFAULT NULL AFTER generation_source");
+    }
+
+    private void addColumnIfMissing(String name, String ddl) {
+        Integer existing = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'question' AND COLUMN_NAME = ?",
+                Integer.class, name);
+        if (existing != null && existing == 0) jdbcTemplate.execute(ddl);
     }
 }

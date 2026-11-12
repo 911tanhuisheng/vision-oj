@@ -20,6 +20,10 @@ public class QuestionAdminListItemVO {
     private String content;
     private String questionType;
     private String imageUrl;
+
+    private String generationSource;
+
+    private String generationModel;
     private String visionModelKey;
     private Integer countTolerance;
     private List<String> tags;

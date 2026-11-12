@@ -86,13 +86,12 @@ async function loadMessages() {
 async function onMarkAnnouncementsRead() {
   if (!announcements.value.length) return
   const ids = announcements.value.map((a) => String(a.id ?? '')).filter(Boolean)
-  const maxId = ids.reduce((m, id) => {
-    const n = Number(id)
-    return Number.isFinite(n) && n > m ? n : m
-  }, 0)
-  if (maxId <= 0) return
+  const maxId = ids.filter((id) => /^[1-9]\d*$/.test(id)).reduce((m, id) => {
+    return id.length > m.length || (id.length === m.length && id > m) ? id : m
+  }, '')
+  if (!maxId) return
   try {
-    const res = await readAnnouncementsUpTo(String(maxId))
+    const res = await readAnnouncementsUpTo(maxId)
     if (!isResultSuccess(res.code)) {
       Message.error(res.message || '操作失败')
       return

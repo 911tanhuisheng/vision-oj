@@ -56,9 +56,9 @@ public class ContestAdminController {
 
 
     @PostMapping("/add")
-    public Result<Long> add(@Valid @RequestBody ContestAdminAddRequest request) {
+    public Result<String> add(@Valid @RequestBody ContestAdminAddRequest request) {
         assertAdmin();
-        return Result.success(contestService.adminAddContest(request));
+        return Result.success(String.valueOf(contestService.adminAddContest(request)));
     }
 
     @PostMapping("/update")

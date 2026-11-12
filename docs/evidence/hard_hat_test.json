@@ -1,0 +1,83 @@
+{
+  "evaluated_at_utc": "2026-10-30T07:44:48.565025+00:00",
+  "split": "test",
+  "model_sha256": "6de70902a53421181d02e882c86528fced1279492098e44a8b99526ce6c6873f",
+  "dataset_yaml_sha256": "b86dbb31a599d0b6520a4a532b1aa4639ff0a39fe6531d8b45157fc39de41522",
+  "dataset_counts": {
+    "train": {
+      "images": 5269,
+      "labels": 5269,
+      "class_instances": {
+        "0": 4874,
+        "1": 14884,
+        "2": 473
+      }
+    },
+    "val": {
+      "images": 883,
+      "labels": 883,
+      "class_instances": {
+        "0": 902,
+        "1": 2437,
+        "2": 94
+      }
+    },
+    "test": {
+      "images": 883,
+      "labels": 883,
+      "class_instances": {
+        "0": 901,
+        "1": 2426,
+        "2": 48
+      }
+    }
+  },
+  "image_size": 640,
+  "batch": 8,
+  "device": "0",
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "python": "3.13.14",
+  "pytorch": "2.14.0+cu130",
+  "ultralytics": "8.4.154",
+  "precision": 0.6450670333946535,
+  "recall": 0.7039003369705706,
+  "map50": 0.6762875743014328,
+  "map50_95": 0.46250471374414487,
+  "per_class": [
+    {
+      "Class": "head",
+      "Images": 167,
+      "Instances": 901,
+      "Box-P": 0.87029,
+      "Box-R": 0.96781,
+      "Box-F1": 0.91646,
+      "mAP50": 0.97562,
+      "mAP75": 0.81601,
+      "mAP50-95": 0.67241
+    },
+    {
+      "Class": "helmet",
+      "Images": 799,
+      "Instances": 2426,
+      "Box-P": 0.88042,
+      "Box-R": 0.97722,
+      "Box-F1": 0.9263,
+      "mAP50": 0.98574,
+      "mAP75": 0.81223,
+      "mAP50-95": 0.68108
+    },
+    {
+      "Class": "person",
+      "Images": 18,
+      "Instances": 48,
+      "Box-P": 0.18449,
+      "Box-R": 0.16667,
+      "Box-F1": 0.17513,
+      "mAP50": 0.0675,
+      "mAP75": 0.0381,
+      "mAP50-95": 0.03402
+    }
+  ],
+  "taskbook_map50_target": 0.8,
+  "taskbook_map50_passed": false
+}

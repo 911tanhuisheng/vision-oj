@@ -84,7 +84,6 @@ export type { ResultListContestListItemVO } from './models/ResultListContestList
 export type { ResultListContestRankRowVO } from './models/ResultListContestRankRowVO';
 export type { ResultListSiteAnnouncementItemVO } from './models/ResultListSiteAnnouncementItemVO';
 export type { ResultLoginVO } from './models/ResultLoginVO';
-export type { ResultLong } from './models/ResultLong';
 export type { ResultMySubmitItemVO } from './models/ResultMySubmitItemVO';
 export type { ResultNotificationSummaryVO } from './models/ResultNotificationSummaryVO';
 export type { ResultPageBlogPostListItemVO } from './models/ResultPageBlogPostListItemVO';

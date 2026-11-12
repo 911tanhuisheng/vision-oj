@@ -20,6 +20,7 @@ public class SandboxContext {
     public final List<String> outputList = new ArrayList<>();
 
     public File workDir;
+    public File imageDir;
     public File sourceFile;
 
     public long maxTimeMs = 0L;

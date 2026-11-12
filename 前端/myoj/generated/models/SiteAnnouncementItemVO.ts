@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type SiteAnnouncementItemVO = {
-    id?: number;
+    id?: string;
     title?: string;
     content?: string;
     publishedAt?: string;

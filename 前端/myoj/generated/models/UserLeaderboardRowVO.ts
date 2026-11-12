@@ -4,7 +4,7 @@
 /* eslint-disable */
 export type UserLeaderboardRowVO = {
     rankOrder?: number;
-    userId?: number;
+    userId?: string;
     displayName?: string;
     avatar?: string;
     solvedCount?: number;

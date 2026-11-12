@@ -111,7 +111,14 @@ public class ImageOutputJudgeStrategy implements JudgeStrategy {
         List<Box> boxes = new ArrayList<>();
         for (Object item : array) {
             JSONObject o = JSONUtil.parseObj(item);
-            boxes.add(new Box(o.getStr("label", "").trim().toLowerCase(Locale.ROOT), o.getDouble("x1"), o.getDouble("y1"), o.getDouble("x2"), o.getDouble("y2")));
+            String label = o.getStr("label", "").trim().toLowerCase(Locale.ROOT);
+            Double x1 = o.getDouble("x1"), y1 = o.getDouble("y1"), x2 = o.getDouble("x2"), y2 = o.getDouble("y2");
+            if (label.isBlank() || x1 == null || y1 == null || x2 == null || y2 == null
+                    || !Double.isFinite(x1) || !Double.isFinite(y1) || !Double.isFinite(x2) || !Double.isFinite(y2)
+                    || x1 < 0 || y1 < 0 || x2 > 1 || y2 > 1 || x1 >= x2 || y1 >= y2) {
+                throw new IllegalArgumentException("检测框需要有效类别和 0～1 范围内的 x1< x2、y1< y2 坐标");
+            }
+            boxes.add(new Box(label, x1, y1, x2, y2));
         }
         return boxes;
     }

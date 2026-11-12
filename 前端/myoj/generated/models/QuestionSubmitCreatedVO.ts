@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type QuestionSubmitCreatedVO = {
-    questionId?: number;
+    questionId?: string;
     submitNo?: number;
     globalSubmitNo?: number;
     dbId?: string;

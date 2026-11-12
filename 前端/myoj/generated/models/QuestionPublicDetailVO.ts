@@ -5,7 +5,7 @@
 import type { JudgeCase } from './JudgeCase';
 import type { JudgeConfig } from './JudgeConfig';
 export type QuestionPublicDetailVO = {
-    id?: number;
+    id?: string;
     title?: string;
     content?: string;
     questionType?: string;
@@ -17,7 +17,7 @@ export type QuestionPublicDetailVO = {
     acceptedNum?: number;
     judgeConfig?: JudgeConfig;
     sampleJudgeCase?: Array<JudgeCase>;
-    userId?: number;
+    userId?: string;
     userNickname?: string;
     createTime?: string;
     updateTime?: string;

@@ -1,10 +1,6 @@
 package com.spingbootinit.model.dto.user;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
-import org.springframework.format.annotation.DateTimeFormat;
-
-import java.util.Date;
 import java.util.List;
 
 /**
@@ -30,7 +26,6 @@ public class UserUpdateMyRequest {
 
     private String country;
 
-    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
-    @DateTimeFormat(pattern = "yyyy-MM-dd")
-    private Date birthday;
+    /** yyyy-MM-dd；空字符串表示清空，null 表示不修改 */
+    private String birthday;
 }
