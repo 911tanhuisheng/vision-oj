@@ -1,6 +1,6 @@
 # 将此模板复制到 spingboot-init/application-local.yml（模块根目录，不在 src/main/resources）。
-# 该文件被 Git 忽略，也不会进入 JAR。dev 配置会自动读取本文件，
-# 前提是 IDE/Maven 的工作目录为 spingboot-init/。
+# 该文件被 Git 忽略，也不会进入 JAR。dev 配置会自动读取本文件；
+# IDE 工作目录为项目总目录或 spingboot-init/ 时均可使用。
 
 spring:
   datasource:

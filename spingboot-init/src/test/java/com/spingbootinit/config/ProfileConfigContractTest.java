@@ -20,6 +20,7 @@ class ProfileConfigContractTest {
         assertFalse(common.contains("application-local.yml"));
         assertFalse(common.contains("192.168."));
         assertFalse(common.contains("123456"));
+        assertTrue(dev.contains("optional:file:./spingboot-init/application-local.yml"));
         assertTrue(dev.contains("optional:file:./application-local.yml"));
         assertFalse(prod.contains("application-local.yml"));
         assertTrue(dev.contains("127.0.0.1"));

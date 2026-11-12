@@ -131,7 +131,7 @@ mysql -u root -p < spingboot-init/src/main/resources/db/schema.sql
 
 此脚本创建 **`tan`** 数据库，包含表结构、开发用管理员 `admin` / `123456`、基础算法题和示例竞赛。已有库导入前先备份；公开部署前必须修改管理员密码。`application-dev.yml` 的默认数据库是 `test`，因此本地若导入 `tan`，须明确设置 `MYSQL_URL` 指向 `tan`。
 
-2. 配置本机连接：参考 [.env.example](./.env.example) 设置操作系统或 IDE 环境变量；也可按 [`application-local.yml.example`](./spingboot-init/src/main/resources/application-local.yml.example) 在 `spingboot-init/` 模块根目录创建被 Git 忽略的 `application-local.yml`。选择 `dev` Profile 且工作目录为 `spingboot-init/` 时，`application-dev.yml` 会自动读取该文件；无需再填写 `--spring.config.additional-location`。Spring Boot 不会自动读取项目根目录的 `.env`；不要提交真实密码和密钥。`dev` 的 Redis 默认端口是 `16379`（供 FinalShell 隧道使用）；本机 Redis 运行在 `6379` 时需覆盖 `REDIS_PORT`。若使用远程 Sandbox，把其 URL 和相同的至少 32 位随机 `SANDBOX_AUTH_KEY` 写入本机私有配置；仓库默认地址是本机 `127.0.0.1:8080`。
+2. 配置本机连接：参考 [.env.example](./.env.example) 设置操作系统或 IDE 环境变量；也可按 [`application-local.yml.example`](./spingboot-init/src/main/resources/application-local.yml.example) 在 `spingboot-init/` 模块根目录创建被 Git 忽略的 `application-local.yml`。选择 `dev` Profile 且工作目录为项目总目录或 `spingboot-init/` 时，`application-dev.yml` 会自动读取该文件；无需再填写 `--spring.config.additional-location`。Spring Boot 不会自动读取项目根目录的 `.env`；不要提交真实密码和密钥。`dev` 的 Redis 默认端口是 `16379`（供 FinalShell 隧道使用）；本机 Redis 运行在 `6379` 时需覆盖 `REDIS_PORT`。若使用远程 Sandbox，把其 URL 和相同的至少 32 位随机 `SANDBOX_AUTH_KEY` 写入本机私有配置；仓库默认地址是本机 `127.0.0.1:8080`。
 
 3. 先准备 Python 镜像所需模型文件，再构建镜像并启动 Sandbox（需 Docker）：
 

@@ -1,7 +1,10 @@
 spring:
   config:
-    # Load ignored, machine-specific credentials when running from the module directory.
-    import: optional:file:./application-local.yml
+    # IDEA may run from the repository root; Maven usually runs from this module.
+    # Both locations point to the same ignored private file in their respective workdir.
+    import:
+      - optional:file:./spingboot-init/application-local.yml
+      - optional:file:./application-local.yml
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/test?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USER:root}
